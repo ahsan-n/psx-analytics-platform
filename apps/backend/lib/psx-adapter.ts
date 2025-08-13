@@ -165,19 +165,29 @@ class PSXAdapter {
       const allList = allCompanies.companies || [];
       const kseCompanies = allList.filter(c => kset.has((c.symbol || '').toUpperCase()));
 
-      const sectorMap = new Map<string, { count: number; marketCapM: number; totalPE: number; perfSum: number }>();
+      // Prefetch fundamentals (P/E) for all KSE100 companies; cached for subsequent requests
+      await Promise.all(kseCompanies.map(c => c.symbol ? this.loadCompanyFundamentals(c.symbol) : Promise.resolve({}))); 
+
+      const sectorMap = new Map<string, { count: number; marketCapM: number; totalPE: number; peCount: number; perfSum: number }>();
       let totalMarketCapM = 0;
       for (const c of kseCompanies) {
         const sector = c.sector || 'Unknown';
-        if (!sectorMap.has(sector)) sectorMap.set(sector, { count: 0, marketCapM: 0, totalPE: 0, perfSum: 0 });
+        if (!sectorMap.has(sector)) sectorMap.set(sector, { count: 0, marketCapM: 0, totalPE: 0, peCount: 0, perfSum: 0 });
         const s = sectorMap.get(sector)!;
         s.count += 1;
-        // Prefer exact market cap from KSE100 metrics when available
-        const m = this.kse100Metrics?.get((c.symbol || '').toUpperCase());
+        const sym = (c.symbol || '').toUpperCase();
+        // Market cap and daily change from KSE100 constituents table (authoritative, already in millions)
+        const m = this.kse100Metrics?.get(sym);
         const marketCapM = m ? m.marketCapM : (c.marketCap ? c.marketCap / 1_000_000 : 0);
         s.marketCapM += marketCapM || 0;
-        s.totalPE += c.pe || 0;
-        s.perfSum += c.change || 0;
+        // P/E from company fundamentals page cache when available
+        const f = this.companyFundamentals.get(sym);
+        if (f && f.pe !== undefined && !Number.isNaN(f.pe)) {
+          s.totalPE += f.pe;
+          s.peCount += 1;
+        }
+        // Use changePct from constituents table for performance
+        s.perfSum += (m ? m.changePct : 0);
         totalMarketCapM += marketCapM || 0;
       }
 
@@ -186,7 +196,7 @@ class PSXAdapter {
         marketCap: s.marketCapM, // in PKR millions
         percentage: totalMarketCapM > 0 ? (s.marketCapM / totalMarketCapM) * 100 : 0,
         companiesCount: s.count,
-        avgPE: s.count > 0 ? s.totalPE / s.count : 0,
+        avgPE: s.peCount > 0 ? s.totalPE / s.peCount : 0,
         performance1M: s.count > 0 ? s.perfSum / s.count : 0,
       }));
 
