@@ -23,6 +23,7 @@ class PSXAdapter {
   private defaultOptions: PSXHttpOptions;
   private kse100Symbols: Set<string> | null = null;
   private kse100Metrics: Map<string, { current: number; changePct: number; marketCapM: number }> | null = null;
+  private companyFundamentals: Map<string, { pe?: number; marketCapM?: number }> = new Map();
 
   constructor(baseUrl = PSX_BASE_URL, options: PSXHttpOptions = {}) {
     this.baseUrl = baseUrl;
@@ -65,6 +66,41 @@ class PSXAdapter {
       }
     }
     this.kse100Metrics = metrics;
+  }
+
+  private async loadCompanyFundamentals(symbol: string): Promise<{ pe?: number; marketCapM?: number }> {
+    const upper = (symbol || '').toUpperCase();
+    const cached = this.companyFundamentals.get(upper);
+    if (cached && (cached.pe !== undefined || cached.marketCapM !== undefined)) return cached;
+
+    const response = await this.fetchWithRetry(`${this.baseUrl}/company/${upper}`);
+    const html = await response.text();
+
+    let pe: number | undefined;
+    let marketCapM: number | undefined;
+
+    try {
+      // P/E Ratio (TTM) **
+      const peSectionMatch = html.match(/P\/?E\s*Ratio\s*\(TTM\)[\s\S]*?<div[^>]*class="stats_value"[^>]*>([\d.,]+)<\/div>/i);
+      if (peSectionMatch && peSectionMatch[1]) {
+        pe = parseFloat(peSectionMatch[1].replace(/,/g, ''));
+      }
+    } catch {}
+
+    try {
+      // Market Cap (000's) in equity section → convert to millions
+      const mcMatch = html.match(/Market\s*Cap\s*\(0+\'?s\)[\s\S]*?<div[^>]*class="stats_value"[^>]*>([\d.,]+)<\/div>/i);
+      if (mcMatch && mcMatch[1]) {
+        const thousands = parseFloat(mcMatch[1].replace(/,/g, ''));
+        if (!Number.isNaN(thousands)) {
+          marketCapM = thousands / 1000.0;
+        }
+      }
+    } catch {}
+
+    const result = { pe, marketCapM };
+    this.companyFundamentals.set(upper, result);
+    return result;
   }
 
   private async fetchWithRetry(url: string, options: RequestInit = {}): Promise<Response> {
@@ -288,8 +324,18 @@ class PSXAdapter {
       const page = params.page || 1;
       const limit = params.limit || 20;
       const startIndex = (page - 1) * limit;
-      const companies = enriched.slice(startIndex, startIndex + limit);
-      return { companies, total: enriched.length, page, limit };
+      const pageSlice = enriched.slice(startIndex, startIndex + limit);
+      // Fill P/E (and missing market cap) from company page fundamentals for visible page only (perf)
+      const filled = await Promise.all(pageSlice.map(async (c) => {
+        if (!c.symbol) return c;
+        const f = await this.loadCompanyFundamentals(c.symbol);
+        return {
+          ...c,
+          pe: (f.pe !== undefined ? f.pe : c.pe),
+          marketCap: (c.marketCap !== undefined ? c.marketCap : f.marketCapM),
+        };
+      }));
+      return { companies: filled, total: enriched.length, page, limit };
     }
     // Non-index case: apply optional sector filter then paginate
     const sectorFiltered = params.sector
