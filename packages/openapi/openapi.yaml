@@ -41,6 +41,17 @@ paths:
           description: Filter by sector
           schema:
             type: string
+        - name: status
+          in: query
+          description: Listing status filter (e.g., NC)
+          schema:
+            type: string
+        - name: page
+          in: query
+          description: Page number (1-based)
+          schema:
+            type: integer
+            default: 1
         - name: limit
           in: query
           description: Limit number of results
@@ -73,6 +84,194 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CompanyAnalyticsResponse'
+
+  /api/indices/{code}:
+    get:
+      summary: Get index snapshot by code
+      operationId: getIndexSnapshot
+      parameters:
+        - name: code
+          in: path
+          required: true
+          description: Index code (e.g., KSE100)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Index snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexSnapshot'
+
+  /api/market/performers:
+    get:
+      summary: Get market performers (gainers, losers, volume leaders)
+      operationId: getMarketPerformers
+      parameters:
+        - name: board
+          in: query
+          description: Market board code
+          schema:
+            type: string
+        - name: session
+          in: query
+          description: Trading session identifier
+          schema:
+            type: string
+        - name: assetClass
+          in: query
+          description: Asset class filter
+          schema:
+            type: string
+            enum: [equity, debt]
+      responses:
+        '200':
+          description: Market performers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PerformersResponse'
+
+  /api/market/watch:
+    get:
+      summary: Get market watch table
+      operationId: getMarketWatch
+      responses:
+        '200':
+          description: Market watch rows
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketWatchResponse'
+
+  /api/market/summary:
+    get:
+      summary: Get today's market boards summary
+      operationId: getMarketSummary
+      responses:
+        '200':
+          description: Boards totals summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketSummaryResponse'
+
+  /api/historical:
+    post:
+      summary: Get historical OHLCV series
+      operationId: getHistoricalSeries
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HistoricalRequest'
+      responses:
+        '200':
+          description: Historical OHLCV series
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HistoricalSeriesResponse'
+
+  /api/announcements:
+    post:
+      summary: Get company announcements
+      operationId: getAnnouncements
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnnouncementsRequest'
+      responses:
+        '200':
+          description: Announcements list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnnouncementsResponse'
+
+  /api/company/{symbol}/reports:
+    get:
+      summary: Get company reports (documents)
+      operationId: getCompanyReports
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          description: Company symbol
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Reports list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompanyReportsResponse'
+
+  /api/company/{symbol}/intraday:
+    get:
+      summary: Get intraday price series for a company
+      operationId: getCompanyIntraday
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          description: Company symbol
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Intraday series
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntradaySeriesResponse'
+
+  /api/indices:
+    get:
+      summary: Get snapshots for all indices
+      operationId: getIndices
+      responses:
+        '200':
+          description: Indices snapshot list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndicesResponse'
+
+  /api/indices/{code}/intraday:
+    get:
+      summary: Get intraday series for an index
+      operationId: getIndexIntraday
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Intraday series
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntradaySeriesResponse'
+
+  /api/symbols:
+    get:
+      summary: Get all tradable symbols
+      operationId: getSymbols
+      responses:
+        '200':
+          description: Symbols list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SymbolsResponse'
 components:
   schemas:
     HealthResponse:
@@ -272,4 +471,277 @@ components:
         low52W:
           type: number
           description: 52-week low
+
+    IndicesResponse:
+      type: object
+      properties:
+        asOf:
+          type: string
+          format: date-time
+        indices:
+          type: array
+          items:
+            $ref: '#/components/schemas/IndexSnapshot'
+
+    IndexSnapshot:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        value:
+          type: number
+        change:
+          type: number
+        changePct:
+          type: number
+        high:
+          type: number
+        low:
+          type: number
+        volume:
+          type: number
+        asOf:
+          type: string
+          format: date-time
+
+    Performer:
+      type: object
+      properties:
+        symbol:
+          type: string
+        name:
+          type: string
+        price:
+          type: number
+        changePct:
+          type: number
+        volume:
+          type: number
+
+    PerformersResponse:
+      type: object
+      properties:
+        gainers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Performer'
+        losers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Performer'
+        volumeLeaders:
+          type: array
+          items:
+            $ref: '#/components/schemas/Performer'
+
+    MarketWatchRow:
+      type: object
+      properties:
+        symbol:
+          type: string
+        sector:
+          type: string
+        listedIn:
+          type: string
+          description: Comma separated index memberships
+        ldcp:
+          type: number
+        open:
+          type: number
+        high:
+          type: number
+        low:
+          type: number
+        current:
+          type: number
+        change:
+          type: number
+        percentChange:
+          type: number
+        volume:
+          type: integer
+
+    MarketWatchResponse:
+      type: object
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/MarketWatchRow'
+
+    BoardSummary:
+      type: object
+      properties:
+        board:
+          type: string
+        trades:
+          type: integer
+        volume:
+          type: integer
+        value:
+          type: number
+
+    MarketSummaryResponse:
+      type: object
+      properties:
+        asOf:
+          type: string
+          format: date-time
+        boards:
+          type: array
+          items:
+            $ref: '#/components/schemas/BoardSummary'
+
+    HistoricalRequest:
+      type: object
+      required: [symbol, dateFrom, dateTo, interval]
+      properties:
+        symbol:
+          type: string
+        dateFrom:
+          type: string
+          format: date
+        dateTo:
+          type: string
+          format: date
+        interval:
+          type: string
+          enum: [daily, weekly, monthly, intraday]
+
+    OHLCVPoint:
+      type: object
+      properties:
+        date:
+          type: string
+          description: ISO date or datetime
+        open:
+          type: number
+        high:
+          type: number
+        low:
+          type: number
+        close:
+          type: number
+        volume:
+          type: integer
+
+    HistoricalSeriesResponse:
+      type: object
+      properties:
+        symbol:
+          type: string
+        series:
+          type: array
+          items:
+            $ref: '#/components/schemas/OHLCVPoint'
+
+    AnnouncementsRequest:
+      type: object
+      required: [symbol]
+      properties:
+        symbol:
+          type: string
+        fromDate:
+          type: string
+          format: date
+        toDate:
+          type: string
+          format: date
+        categories:
+          type: array
+          items:
+            type: string
+
+    AnnouncementItem:
+      type: object
+      properties:
+        id:
+          type: string
+        date:
+          type: string
+          format: date
+        title:
+          type: string
+        category:
+          type: string
+        url:
+          type: string
+
+    AnnouncementsResponse:
+      type: object
+      properties:
+        symbol:
+          type: string
+        announcements:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnnouncementItem'
+
+    CompanyReportItem:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        title:
+          type: string
+        category:
+          type: string
+        pdfUrl:
+          type: string
+
+    CompanyReportsResponse:
+      type: object
+      properties:
+        symbol:
+          type: string
+        reports:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompanyReportItem'
+
+    IntradayPoint:
+      type: object
+      properties:
+        time:
+          type: string
+          description: ISO datetime
+        price:
+          type: number
+        volume:
+          type: integer
+
+    IntradaySeriesResponse:
+      type: object
+      properties:
+        symbol:
+          type: string
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntradayPoint'
+
+    SymbolItem:
+      type: object
+      properties:
+        symbol:
+          type: string
+        name:
+          type: string
+        sectorName:
+          type: string
+        isETF:
+          type: boolean
+        isDebt:
+          type: boolean
+
+    SymbolsResponse:
+      type: object
+      properties:
+        symbols:
+          type: array
+          items:
+            $ref: '#/components/schemas/SymbolItem'
 

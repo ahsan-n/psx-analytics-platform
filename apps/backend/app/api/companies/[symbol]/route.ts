@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { psxAdapter } from '../../../../lib/psx-adapter';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,8 +9,15 @@ export async function GET(
 ) {
   const { symbol } = await params;
 
-  // Mock company analytics data - in real app this would come from database
-  const mockCompanyData: Record<string, any> = {
+  try {
+    // Try to fetch real PSX company data
+    const companyData = await psxAdapter.getCompanyAnalytics(symbol);
+    return NextResponse.json(companyData);
+  } catch (error) {
+    console.error(`Failed to fetch PSX company data for ${symbol}, falling back to mock:`, error);
+    
+    // Fallback to mock data if PSX is unavailable
+    const mockCompanyData: Record<string, any> = {
     'HBL': {
       company: {
         symbol: 'HBL',
@@ -132,14 +140,15 @@ export async function GET(
     }
   };
 
-  const companyData = mockCompanyData[symbol.toUpperCase()];
+    const companyData = mockCompanyData[symbol.toUpperCase()];
 
-  if (!companyData) {
-    return NextResponse.json(
-      { error: 'Company not found' },
-      { status: 404 }
-    );
+    if (!companyData) {
+      return NextResponse.json(
+        { error: 'Company not found' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json(companyData);
   }
-
-  return NextResponse.json(companyData);
 }

@@ -21,6 +21,50 @@ export interface paths {
     /** Get company analytics */
     get: operations["getCompanyAnalytics"];
   };
+  "/api/indices/{code}": {
+    /** Get index snapshot by code */
+    get: operations["getIndexSnapshot"];
+  };
+  "/api/market/performers": {
+    /** Get market performers (gainers, losers, volume leaders) */
+    get: operations["getMarketPerformers"];
+  };
+  "/api/market/watch": {
+    /** Get market watch table */
+    get: operations["getMarketWatch"];
+  };
+  "/api/market/summary": {
+    /** Get today's market boards summary */
+    get: operations["getMarketSummary"];
+  };
+  "/api/historical": {
+    /** Get historical OHLCV series */
+    post: operations["getHistoricalSeries"];
+  };
+  "/api/announcements": {
+    /** Get company announcements */
+    post: operations["getAnnouncements"];
+  };
+  "/api/company/{symbol}/reports": {
+    /** Get company reports (documents) */
+    get: operations["getCompanyReports"];
+  };
+  "/api/company/{symbol}/intraday": {
+    /** Get intraday price series for a company */
+    get: operations["getCompanyIntraday"];
+  };
+  "/api/indices": {
+    /** Get snapshots for all indices */
+    get: operations["getIndices"];
+  };
+  "/api/indices/{code}/intraday": {
+    /** Get intraday series for an index */
+    get: operations["getIndexIntraday"];
+  };
+  "/api/symbols": {
+    /** Get all tradable symbols */
+    get: operations["getSymbols"];
+  };
 }
 
 export type webhooks = Record<string, never>;
@@ -144,6 +188,136 @@ export interface components {
       /** @description 52-week low */
       low52W?: number;
     };
+    IndicesResponse: {
+      /** Format: date-time */
+      asOf?: string;
+      indices?: components["schemas"]["IndexSnapshot"][];
+    };
+    IndexSnapshot: {
+      code?: string;
+      name?: string;
+      value?: number;
+      change?: number;
+      changePct?: number;
+      high?: number;
+      low?: number;
+      volume?: number;
+      /** Format: date-time */
+      asOf?: string;
+    };
+    Performer: {
+      symbol?: string;
+      name?: string;
+      price?: number;
+      changePct?: number;
+      volume?: number;
+    };
+    PerformersResponse: {
+      gainers?: components["schemas"]["Performer"][];
+      losers?: components["schemas"]["Performer"][];
+      volumeLeaders?: components["schemas"]["Performer"][];
+    };
+    MarketWatchRow: {
+      symbol?: string;
+      sector?: string;
+      /** @description Comma separated index memberships */
+      listedIn?: string;
+      ldcp?: number;
+      open?: number;
+      high?: number;
+      low?: number;
+      current?: number;
+      change?: number;
+      percentChange?: number;
+      volume?: number;
+    };
+    MarketWatchResponse: {
+      rows?: components["schemas"]["MarketWatchRow"][];
+    };
+    BoardSummary: {
+      board?: string;
+      trades?: number;
+      volume?: number;
+      value?: number;
+    };
+    MarketSummaryResponse: {
+      /** Format: date-time */
+      asOf?: string;
+      boards?: components["schemas"]["BoardSummary"][];
+    };
+    HistoricalRequest: {
+      symbol: string;
+      /** Format: date */
+      dateFrom: string;
+      /** Format: date */
+      dateTo: string;
+      /** @enum {string} */
+      interval: "daily" | "weekly" | "monthly" | "intraday";
+    };
+    OHLCVPoint: {
+      /** @description ISO date or datetime */
+      date?: string;
+      open?: number;
+      high?: number;
+      low?: number;
+      close?: number;
+      volume?: number;
+    };
+    HistoricalSeriesResponse: {
+      symbol?: string;
+      series?: components["schemas"]["OHLCVPoint"][];
+    };
+    AnnouncementsRequest: {
+      symbol: string;
+      /** Format: date */
+      fromDate?: string;
+      /** Format: date */
+      toDate?: string;
+      categories?: string[];
+    };
+    AnnouncementItem: {
+      id?: string;
+      /** Format: date */
+      date?: string;
+      title?: string;
+      category?: string;
+      url?: string;
+    };
+    AnnouncementsResponse: {
+      symbol?: string;
+      announcements?: components["schemas"]["AnnouncementItem"][];
+    };
+    CompanyReportItem: {
+      /** Format: date */
+      date?: string;
+      title?: string;
+      category?: string;
+      pdfUrl?: string;
+    };
+    CompanyReportsResponse: {
+      symbol?: string;
+      reports?: components["schemas"]["CompanyReportItem"][];
+    };
+    IntradayPoint: {
+      /** @description ISO datetime */
+      time?: string;
+      price?: number;
+      volume?: number;
+    };
+    IntradaySeriesResponse: {
+      symbol?: string;
+      points?: components["schemas"]["IntradayPoint"][];
+    };
+    SymbolItem: {
+      symbol?: string;
+      name?: string;
+      sectorName?: string;
+      isETF?: boolean;
+      isDebt?: boolean;
+    };
+    SymbolsResponse: {
+      symbols?: components["schemas"]["SymbolItem"][];
+    };
   };
   responses: never;
   parameters: never;
@@ -186,6 +360,10 @@ export interface operations {
       query?: {
         /** @description Filter by sector */
         sector?: string;
+        /** @description Listing status filter (e.g., NC) */
+        status?: string;
+        /** @description Page number (1-based) */
+        page?: number;
         /** @description Limit number of results */
         limit?: number;
       };
@@ -212,6 +390,170 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["CompanyAnalyticsResponse"];
+        };
+      };
+    };
+  };
+  /** Get index snapshot by code */
+  getIndexSnapshot: {
+    parameters: {
+      path: {
+        /** @description Index code (e.g., KSE100) */
+        code: string;
+      };
+    };
+    responses: {
+      /** @description Index snapshot */
+      200: {
+        content: {
+          "application/json": components["schemas"]["IndexSnapshot"];
+        };
+      };
+    };
+  };
+  /** Get market performers (gainers, losers, volume leaders) */
+  getMarketPerformers: {
+    parameters: {
+      query?: {
+        /** @description Market board code */
+        board?: string;
+        /** @description Trading session identifier */
+        session?: string;
+        /** @description Asset class filter */
+        assetClass?: "equity" | "debt";
+      };
+    };
+    responses: {
+      /** @description Market performers */
+      200: {
+        content: {
+          "application/json": components["schemas"]["PerformersResponse"];
+        };
+      };
+    };
+  };
+  /** Get market watch table */
+  getMarketWatch: {
+    responses: {
+      /** @description Market watch rows */
+      200: {
+        content: {
+          "application/json": components["schemas"]["MarketWatchResponse"];
+        };
+      };
+    };
+  };
+  /** Get today's market boards summary */
+  getMarketSummary: {
+    responses: {
+      /** @description Boards totals summary */
+      200: {
+        content: {
+          "application/json": components["schemas"]["MarketSummaryResponse"];
+        };
+      };
+    };
+  };
+  /** Get historical OHLCV series */
+  getHistoricalSeries: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["HistoricalRequest"];
+      };
+    };
+    responses: {
+      /** @description Historical OHLCV series */
+      200: {
+        content: {
+          "application/json": components["schemas"]["HistoricalSeriesResponse"];
+        };
+      };
+    };
+  };
+  /** Get company announcements */
+  getAnnouncements: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AnnouncementsRequest"];
+      };
+    };
+    responses: {
+      /** @description Announcements list */
+      200: {
+        content: {
+          "application/json": components["schemas"]["AnnouncementsResponse"];
+        };
+      };
+    };
+  };
+  /** Get company reports (documents) */
+  getCompanyReports: {
+    parameters: {
+      path: {
+        /** @description Company symbol */
+        symbol: string;
+      };
+    };
+    responses: {
+      /** @description Reports list */
+      200: {
+        content: {
+          "application/json": components["schemas"]["CompanyReportsResponse"];
+        };
+      };
+    };
+  };
+  /** Get intraday price series for a company */
+  getCompanyIntraday: {
+    parameters: {
+      path: {
+        /** @description Company symbol */
+        symbol: string;
+      };
+    };
+    responses: {
+      /** @description Intraday series */
+      200: {
+        content: {
+          "application/json": components["schemas"]["IntradaySeriesResponse"];
+        };
+      };
+    };
+  };
+  /** Get snapshots for all indices */
+  getIndices: {
+    responses: {
+      /** @description Indices snapshot list */
+      200: {
+        content: {
+          "application/json": components["schemas"]["IndicesResponse"];
+        };
+      };
+    };
+  };
+  /** Get intraday series for an index */
+  getIndexIntraday: {
+    parameters: {
+      path: {
+        code: string;
+      };
+    };
+    responses: {
+      /** @description Intraday series */
+      200: {
+        content: {
+          "application/json": components["schemas"]["IntradaySeriesResponse"];
+        };
+      };
+    };
+  };
+  /** Get all tradable symbols */
+  getSymbols: {
+    responses: {
+      /** @description Symbols list */
+      200: {
+        content: {
+          "application/json": components["schemas"]["SymbolsResponse"];
         };
       };
     };
