@@ -1,0 +1,281 @@
+---
+description: Go backend development rules for PSX Analytics Platform
+globs: ["**/*.go", "**/go.mod", "**/go.sum"]
+alwaysApply: false
+---
+
+# Go Backend Development Rules - PSX Analytics Platform
+
+## Go Version & Tools
+- **Go Version**: 1.21+ (latest stable)
+- **Framework**: go-zero for microservices architecture
+- **Database**: PostgreSQL with sqlx for database operations
+- **Code Generation**: goctl for go-zero code generation
+
+## Project Structure
+```
+backend/
+├── cmd/                   # Service entry points
+│   ├── auth-service/     # Authentication service
+│   ├── market-service/   # Market data service
+│   ├── portfolio-service/ # Portfolio management service
+│   └── analytics-service/ # Analytics service
+├── internal/             # Private application code
+│   ├── config/          # Configuration management
+│   ├── handler/         # HTTP handlers
+│   ├── logic/           # Business logic
+│   ├── svc/             # Service context
+│   ├── types/           # Request/response types
+│   └── middleware/      # HTTP middleware
+├── pkg/                  # Public packages
+│   ├── database/        # Database utilities
+│   ├── auth/            # Authentication utilities
+│   ├── cache/           # Caching utilities
+│   └── utils/           # Common utilities
+└── scripts/              # Build and deployment scripts
+```
+
+## Go Coding Standards
+
+### Code Style
+- **Formatting**: Use `gofmt` and `goimports` for consistent formatting
+- **Linting**: Use `golangci-lint` with strict rules
+- **Naming**: Follow Go naming conventions
+  - `camelCase` for variables and functions
+  - `PascalCase` for exported names
+  - `UPPER_CASE` for constants
+  - `snake_case` for file names
+
+### Error Handling
+```go
+// Good: Wrap errors with context
+if err != nil {
+    return fmt.Errorf("failed to fetch user: %w", err)
+}
+
+// Good: Use custom error types for business logic
+type ValidationError struct {
+    Field   string
+    Message string
+}
+
+func (e ValidationError) Error() string {
+    return fmt.Sprintf("validation failed for %s: %s", e.Field, e.Message)
+}
+```
+
+### Database Operations with sqlx
+```go
+// Use sqlx for type-safe database operations
+type User struct {
+    ID       int64  `db:"id"`
+    Username string `db:"username"`
+    Email    string `db:"email"`
+}
+
+// Good: Use prepared statements
+func (r *UserRepo) GetByID(ctx context.Context, id int64) (*User, error) {
+    var user User
+    query := `SELECT id, username, email FROM users WHERE id = $1`
+    err := r.db.GetContext(ctx, &user, query, id)
+    if err != nil {
+        return nil, fmt.Errorf("failed to get user: %w", err)
+    }
+    return &user, nil
+}
+
+// Good: Use transactions for multiple operations
+func (r *UserRepo) CreateWithProfile(ctx context.Context, user *User, profile *Profile) error {
+    tx, err := r.db.BeginTxx(ctx, nil)
+    if err != nil {
+        return fmt.Errorf("failed to begin transaction: %w", err)
+    }
+    defer tx.Rollback()
+
+    // ... perform operations ...
+
+    return tx.Commit()
+}
+```
+
+## go-zero Framework Usage
+
+### Service Configuration
+```go
+// internal/config/config.go
+type Config struct {
+    rest.RestConf
+    Database struct {
+        Host     string
+        Port     int
+        User     string
+        Password string
+        DBName   string
+        SSLMode  string
+    }
+    Redis struct {
+        Host string
+        Port int
+        DB   int
+    }
+    JWT struct {
+        Secret string
+        Expire int64
+    }
+}
+```
+
+### Handler Implementation
+```go
+// internal/handler/user_handler.go
+type UserHandler struct {
+    svcCtx *svc.ServiceContext
+}
+
+func (h *UserHandler) GetUser(w http.ResponseWriter, r *http.Request) {
+    var req types.GetUserReq
+    if err := httpx.Parse(r, &req); err != nil {
+        httpx.Error(w, err)
+        return
+    }
+
+    l := logic.NewGetUserLogic(r.Context(), h.svcCtx)
+    resp, err := l.GetUser(&req)
+    if err != nil {
+        httpx.Error(w, err)
+        return
+    }
+
+    httpx.OkJson(w, resp)
+}
+```
+
+### Business Logic
+```go
+// internal/logic/user_logic.go
+type GetUserLogic struct {
+    logx.Logger
+    ctx    context.Context
+    svcCtx *svc.ServiceContext
+}
+
+func (l *GetUserLogic) GetUser(req *types.GetUserReq) (*types.GetUserResp, error) {
+    // Input validation
+    if req.ID <= 0 {
+        return nil, errors.New("invalid user ID")
+    }
+
+    // Business logic
+    user, err := l.svcCtx.UserRepo.GetByID(l.ctx, req.ID)
+    if err != nil {
+        return nil, fmt.Errorf("failed to get user: %w", err)
+    }
+
+    // Response mapping
+    return &types.GetUserResp{
+        ID:       user.ID,
+        Username: user.Username,
+        Email:    user.Email,
+    }, nil
+}
+```
+
+## Testing Standards
+
+### Unit Tests
+```go
+// internal/logic/user_logic_test.go
+func TestGetUserLogic_GetUser(t *testing.T) {
+    tests := []struct {
+        name    string
+        req     *types.GetUserReq
+        mock    func(repo *mocks.UserRepo)
+        want    *types.GetUserResp
+        wantErr bool
+    }{
+        {
+            name: "success",
+            req:  &types.GetUserReq{ID: 1},
+            mock: func(repo *mocks.UserRepo) {
+                repo.EXPECT().
+                    GetByID(gomock.Any(), int64(1)).
+                    Return(&models.User{ID: 1, Username: "test", Email: "test@example.com"}, nil)
+            },
+            want: &types.GetUserResp{ID: 1, Username: "test", Email: "test@example.com"},
+        },
+        {
+            name:    "invalid ID",
+            req:     &types.GetUserReq{ID: 0},
+            wantErr: true,
+        },
+    }
+
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            ctrl := gomock.NewController(t)
+            defer ctrl.Finish()
+
+            mockRepo := mocks.NewUserRepo(ctrl)
+            if tt.mock != nil {
+                tt.mock(mockRepo)
+            }
+
+            l := &GetUserLogic{
+                Logger: logx.WithContext(context.Background()),
+                ctx:    context.Background(),
+                svcCtx: &svc.ServiceContext{UserRepo: mockRepo},
+            }
+
+            got, err := l.GetUser(tt.req)
+            if (err != nil) != tt.wantErr {
+                t.Errorf("GetUser() error = %v, wantErr %v", err, tt.wantErr)
+                return
+            }
+            if !reflect.DeepEqual(got, tt.want) {
+                t.Errorf("GetUser() = %v, want %v", got, tt.want)
+            }
+        })
+    }
+}
+```
+
+### Integration Tests
+```go
+// tests/integration/user_test.go
+func TestUserAPI_Integration(t *testing.T) {
+    // Setup test database
+    db := setupTestDB(t)
+    defer cleanupTestDB(t, db)
+
+    // Setup service
+    svc := setupTestService(t, db)
+    
+    // Test API endpoint
+    req := httptest.NewRequest("GET", "/api/users/1", nil)
+    w := httptest.NewRecorder()
+    
+    svc.ServeHTTP(w, req)
+    
+    assert.Equal(t, http.StatusOK, w.Code)
+    
+    var resp types.GetUserResp
+    err := json.Unmarshal(w.Body.Bytes(), &resp)
+    assert.NoError(t, err)
+    assert.Equal(t, int64(1), resp.ID)
+}
+```
+
+## Definition of Done for Go Services
+- [ ] OpenAPI specification complete and validated
+- [ ] go-zero service generated and configured
+- [ ] Database models and migrations created
+- [ ] Repository layer implemented with sqlx
+- [ ] Business logic implemented and tested
+- [ ] HTTP handlers implemented
+- [ ] Middleware configured (auth, logging, CORS)
+- [ ] 100% passing unit tests for business logic
+- [ ] Integration tests passing
+- [ ] Performance benchmarks met
+- [ ] Security review completed
+- [ ] API documentation generated
+- [ ] Code reviewed and approved

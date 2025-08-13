@@ -1,0 +1,635 @@
+---
+description: Vertical slice architecture rules for PSX Analytics Platform
+globs: ["**/*"]
+alwaysApply: false
+---
+
+# Vertical Slice Architecture Rules - PSX Analytics Platform
+
+## Architecture Overview
+
+The PSX Analytics Platform follows **Vertical Slice Architecture** where each slice represents a complete business capability that can be developed, tested, and deployed independently. Each slice contains all the layers needed to deliver that business value.
+
+## Core Principles
+
+### 1. **Business Capability Focus**
+- Organize by **what** the system does, not **how** it does it
+- Each slice represents a complete user journey or business process
+- Slices are independent and loosely coupled
+
+### 2. **Incremental Value Delivery**
+- Each slice delivers complete, usable functionality
+- Users can derive value from individual slices
+- Slices can be developed and deployed independently
+
+### 3. **100% Test Coverage**
+- Each slice must have comprehensive behavioral unit tests
+- Tests cover the complete user workflow within the slice
+- Integration tests ensure slice boundaries work correctly
+
+## Vertical Slices Definition
+
+### 1. **Authentication Slice**
+**Business Capability**: User identity and access management
+
+**Components**:
+- OpenAPI specification (`api/specs/auth-service.yaml`)
+- Go backend service (`backend/auth-service/`)
+- Frontend authentication components (`frontend/src/components/auth/`)
+- Authentication pages (`frontend/src/pages/auth/`)
+- Database models and migrations
+- JWT token management
+- User registration, login, password reset
+
+**Definition of Done**:
+- [ ] User can register with email verification
+- [ ] User can login and receive JWT token
+- [ ] User can reset password via email
+- [ ] JWT token validation works
+- [ ] 100% passing behavioral unit tests
+- [ ] Integration tests passing
+- [ ] Security review completed
+
+### 2. **Market Data Slice**
+**Business Capability**: Real-time stock market information
+
+**Components**:
+- OpenAPI specification (`api/specs/market-service.yaml`)
+- Go backend service (`backend/market-service/`)
+- Frontend market components (`frontend/src/components/market/`)
+- Market data pages (`frontend/src/pages/market/`)
+- Real-time data streaming
+- Stock quotes and charts
+- Market indices and sector data
+
+**Definition of Done**:
+- [ ] Real-time stock quotes display
+- [ ] Interactive charts with TradingView integration
+- [ ] Market indices dashboard
+- [ ] Sector performance views
+- [ ] 100% passing behavioral unit tests
+- [ ] Performance benchmarks met (<100ms response time)
+- [ ] Real-time data validation
+
+### 3. **Portfolio Management Slice**
+**Business Capability**: Personal investment portfolio tracking
+
+**Components**:
+- OpenAPI specification (`api/specs/portfolio-service.yaml`)
+- Go backend service (`backend/portfolio-service/`)
+- Frontend portfolio components (`frontend/src/components/portfolio/`)
+- Portfolio pages (`frontend/src/pages/portfolio/`)
+- Portfolio calculation engine
+- Performance metrics
+- Position management
+
+**Definition of Done**:
+- [ ] User can create and manage portfolios
+- [ ] Real-time portfolio value calculation
+- [ ] Performance metrics and charts
+- [ ] Position entry and editing
+- [ ] 100% passing behavioral unit tests
+- [ ] Portfolio calculations accurate
+- [ ] Real-time updates working
+
+### 4. **Analytics Slice**
+**Business Capability**: Advanced market analysis and insights
+
+**Components**:
+- OpenAPI specification (`api/specs/analytics-service.yaml`)
+- Go backend service (`backend/analytics-service/`)
+- Frontend analytics components (`frontend/src/components/analytics/`)
+- Analytics pages (`frontend/src/pages/analytics/`)
+- Technical indicators
+- Fundamental analysis
+- Stock screening tools
+
+**Definition of Done**:
+- [ ] Technical indicators calculation
+- [ ] Fundamental analysis tools
+- [ ] Stock screening functionality
+- [ ] Pattern recognition
+- [ ] 100% passing behavioral unit tests
+- [ ] Analysis accuracy validated
+- [ ] Performance benchmarks met
+
+### 5. **News & Research Slice**
+**Business Capability**: Financial news and research content
+
+**Components**:
+- OpenAPI specification (`api/specs/news-service.yaml`)
+- Go backend service (`backend/news-service/`)
+- Frontend news components (`frontend/src/components/news/`)
+- News pages (`frontend/src/pages/news/`)
+- News aggregation
+- Research report management
+- Economic calendar
+
+**Definition of Done**:
+- [ ] News feed integration
+- [ ] Research report display
+- [ ] Economic calendar
+- [ ] Content search and filtering
+- [ ] 100% passing behavioral unit tests
+- [ ] Content updates working
+- [ ] Search functionality validated
+
+## Slice Structure
+
+### Backend Slice Structure
+```
+backend/{slice-name}/
+├── cmd/                    # Service entry point
+│   └── main.go
+├── internal/              # Private application code
+│   ├── config/           # Configuration
+│   ├── handler/          # HTTP handlers
+│   ├── logic/            # Business logic
+│   ├── svc/              # Service context
+│   ├── types/            # Request/response types
+│   └── middleware/       # HTTP middleware
+├── pkg/                   # Public packages (if any)
+├── migrations/            # Database migrations
+├── tests/                 # Test files
+├── Dockerfile             # Container definition
+└── go.mod                 # Go module file
+```
+
+### Frontend Slice Structure
+```
+frontend/src/
+├── components/{slice-name}/  # Slice-specific components
+├── pages/{slice-name}/       # Slice-specific pages
+├── hooks/{slice-name}/       # Slice-specific hooks
+├── services/{slice-name}/    # Slice-specific API services
+├── types/{slice-name}/       # Slice-specific types
+└── utils/{slice-name}/       # Slice-specific utilities
+```
+
+## Development Workflow
+
+### 1. **Slice Planning**
+```markdown
+## Slice: Market Data
+**Objective**: Provide real-time stock market information
+**User Stories**:
+- As a user, I want to see real-time stock quotes
+- As a user, I want to view interactive charts
+- As a user, I want to see market indices
+
+**Acceptance Criteria**:
+- Stock quotes update every 5 seconds
+- Charts support multiple timeframes
+- Market indices show daily change
+
+**Technical Requirements**:
+- WebSocket connection for real-time data
+- TradingView chart integration
+- Redis caching for performance
+```
+
+### 2. **Slice Development**
+```bash
+# 1. Create OpenAPI specification
+touch api/specs/market-service.yaml
+
+# 2. Generate backend code
+goctl api go -api api/specs/market-service.yaml -dir backend/market-service
+
+# 3. Generate frontend types
+npx @openapitools/openapi-generator-cli generate \
+  -i api/specs/market-service.yaml \
+  -g typescript-fetch \
+  -o frontend/src/generated/market-api
+
+# 4. Implement backend logic
+cd backend/market-service
+# Implement handlers, logic, and database operations
+
+# 5. Implement frontend components
+cd frontend
+# Create components, pages, and services
+
+# 6. Write comprehensive tests
+# Unit tests for business logic
+# Integration tests for API endpoints
+# Component tests for UI
+```
+
+### 3. **Slice Testing Strategy**
+```go
+// Example: Market Data Slice Test
+func TestMarketDataSlice_CompleteWorkflow(t *testing.T) {
+    // Setup test environment
+    db := setupTestDB(t)
+    defer cleanupTestDB(t, db)
+    
+    // Test 1: Stock quote retrieval
+    t.Run("Stock Quote Retrieval", func(t *testing.T) {
+        // Test API endpoint
+        // Test business logic
+        // Test data persistence
+        // Test error handling
+    })
+    
+    // Test 2: Real-time updates
+    t.Run("Real-time Updates", func(t *testing.T) {
+        // Test WebSocket connection
+        // Test data streaming
+        // Test client reconnection
+    })
+    
+    // Test 3: Chart data integration
+    t.Run("Chart Data Integration", func(t *testing.T) {
+        // Test historical data retrieval
+        // Test data formatting
+        // Test chart rendering
+    })
+}
+```
+
+## Slice Dependencies
+
+### 1. **Shared Dependencies**
+```go
+// Shared packages used across slices
+pkg/
+├── database/              # Database utilities
+├── auth/                  # Authentication utilities
+├── cache/                 # Caching utilities
+├── logging/               # Logging utilities
+└── utils/                 # Common utilities
+```
+
+### 2. **Slice Communication**
+```go
+// Slices communicate through well-defined APIs
+// No direct database access between slices
+
+// Good: Service-to-service communication
+type MarketService struct {
+    portfolioClient *portfolio.Client
+    newsClient     *news.Client
+}
+
+func (s *MarketService) GetStockWithContext(ctx context.Context, symbol string) (*StockQuote, error) {
+    // Get stock quote
+    quote, err := s.getStockQuote(ctx, symbol)
+    if err != nil {
+        return nil, err
+    }
+    
+    // Get related news (cross-slice communication)
+    news, err := s.newsClient.GetStockNews(ctx, symbol)
+    if err != nil {
+        log.Warnf("Failed to get news for %s: %v", symbol, err)
+        // Continue without news
+    }
+    
+    // Get portfolio position if user is authenticated
+    if userID := ctx.Value("user_id"); userID != nil {
+        position, err := s.portfolioClient.GetPosition(ctx, userID.(int64), symbol)
+        if err == nil {
+            quote.UserPosition = position
+        }
+    }
+    
+    return quote, nil
+}
+```
+
+## Testing Requirements
+
+### 1. **Unit Tests (100% Coverage)**
+```go
+// Test business logic thoroughly
+func TestStockQuoteLogic_GetQuote(t *testing.T) {
+    tests := []struct {
+        name     string
+        symbol   string
+        mockData *StockQuote
+        wantErr  bool
+        want     *StockQuote
+    }{
+        {
+            name:   "valid symbol",
+            symbol: "AAPL",
+            mockData: &StockQuote{
+                Symbol: "AAPL",
+                Price:  150.25,
+            },
+            want: &StockQuote{
+                Symbol: "AAPL",
+                Price:  150.25,
+            },
+        },
+        {
+            name:    "invalid symbol",
+            symbol:  "INVALID",
+            wantErr: true,
+        },
+        {
+            name:    "empty symbol",
+            symbol:  "",
+            wantErr: true,
+        },
+    }
+    
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            // Setup mocks
+            mockRepo := &MockStockRepo{}
+            if tt.mockData != nil {
+                mockRepo.On("GetBySymbol", tt.symbol).Return(tt.mockData, nil)
+            } else {
+                mockRepo.On("GetBySymbol", tt.symbol).Return(nil, errors.New("not found"))
+            }
+            
+            // Create service
+            svc := &StockService{repo: mockRepo}
+            
+            // Execute
+            got, err := svc.GetQuote(context.Background(), tt.symbol)
+            
+            // Assert
+            if (err != nil) != tt.wantErr {
+                t.Errorf("GetQuote() error = %v, wantErr %v", err, tt.wantErr)
+                return
+            }
+            if !reflect.DeepEqual(got, tt.want) {
+                t.Errorf("GetQuote() = %v, want %v", got, tt.want)
+            }
+            
+            // Verify mocks
+            mockRepo.AssertExpectations(t)
+        })
+    }
+}
+```
+
+### 2. **Integration Tests**
+```go
+// Test complete workflows
+func TestMarketDataSlice_Integration(t *testing.T) {
+    // Setup test environment
+    app := setupTestApp(t)
+    defer app.Cleanup()
+    
+    // Test complete user journey
+    t.Run("User Views Stock Quote", func(t *testing.T) {
+        // 1. User searches for stock
+        searchResp, err := app.SearchStock("AAPL")
+        assert.NoError(t, err)
+        assert.Contains(t, searchResp.Results, "AAPL")
+        
+        // 2. User gets stock quote
+        quoteResp, err := app.GetStockQuote("AAPL")
+        assert.NoError(t, err)
+        assert.Equal(t, "AAPL", quoteResp.Symbol)
+        assert.Greater(t, quoteResp.Price, 0.0)
+        
+        // 3. User views chart data
+        chartResp, err := app.GetStockChart("AAPL", "1d")
+        assert.NoError(t, err)
+        assert.NotEmpty(t, chartResp.Data)
+        
+        // 4. User adds to watchlist
+        watchResp, err := app.AddToWatchlist("AAPL")
+        assert.NoError(t, err)
+        assert.True(t, watchResp.Success)
+    })
+}
+```
+
+### 3. **Performance Tests**
+```go
+// Test performance requirements
+func TestMarketDataSlice_Performance(t *testing.T) {
+    app := setupTestApp(t)
+    defer app.Cleanup()
+    
+    t.Run("Stock Quote Response Time", func(t *testing.T) {
+        start := time.Now()
+        _, err := app.GetStockQuote("AAPL")
+        duration := time.Since(start)
+        
+        assert.NoError(t, err)
+        assert.Less(t, duration, 100*time.Millisecond, "Response time should be <100ms")
+    })
+    
+    t.Run("Concurrent Requests", func(t *testing.T) {
+        const numRequests = 100
+        var wg sync.WaitGroup
+        results := make(chan error, numRequests)
+        
+        for i := 0; i < numRequests; i++ {
+            wg.Add(1)
+            go func() {
+                defer wg.Done()
+                _, err := app.GetStockQuote("AAPL")
+                results <- err
+            }()
+        }
+        
+        wg.Wait()
+        close(results)
+        
+        // Check all requests succeeded
+        for err := range results {
+            assert.NoError(t, err)
+        }
+    })
+}
+```
+
+## Deployment Strategy
+
+### 1. **Independent Deployment**
+```yaml
+# Each slice can be deployed independently
+# docker-compose.yml
+version: '3.8'
+services:
+  auth-service:
+    build: ./backend/auth-service
+    ports:
+      - "8081:8080"
+    environment:
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+  
+  market-service:
+    build: ./backend/market-service
+    ports:
+      - "8082:8080"
+    environment:
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+  
+  portfolio-service:
+    build: ./backend/portfolio-service
+    ports:
+      - "8083:8080"
+    environment:
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+```
+
+### 2. **Database Migrations**
+```sql
+-- Each slice manages its own database schema
+-- migrations/001_create_stocks.sql
+CREATE TABLE stocks (
+    id BIGSERIAL PRIMARY KEY,
+    symbol VARCHAR(10) UNIQUE NOT NULL,
+    company_name VARCHAR(255) NOT NULL,
+    sector VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_stocks_symbol ON stocks(symbol);
+CREATE INDEX idx_stocks_sector ON stocks(sector);
+```
+
+## Monitoring and Observability
+
+### 1. **Slice Health Checks**
+```go
+// Each slice provides health check endpoint
+func (h *HealthHandler) Check(w http.ResponseWriter, r *http.Request) {
+    health := &HealthStatus{
+        Status:    "healthy",
+        Timestamp: time.Now(),
+        Services:  make(map[string]string),
+    }
+    
+    // Check database
+    if err := h.db.Ping(); err != nil {
+        health.Status = "unhealthy"
+        health.Services["database"] = "down"
+    } else {
+        health.Services["database"] = "up"
+    }
+    
+    // Check Redis
+    if err := h.redis.Ping(); err != nil {
+        health.Status = "unhealthy"
+        health.Services["redis"] = "down"
+    } else {
+        health.Services["redis"] = "up"
+    }
+    
+    // Check external dependencies
+    if err := h.marketDataProvider.Health(); err != nil {
+        health.Status = "degraded"
+        health.Services["market_data"] = "down"
+    } else {
+        health.Services["market_data"] = "up"
+    }
+    
+    httpx.OkJson(w, health)
+}
+```
+
+### 2. **Slice Metrics**
+```go
+// Each slice exposes relevant metrics
+var (
+    StockQuoteRequests = prometheus.NewCounterVec(
+        prometheus.CounterOpts{
+            Name: "stock_quote_requests_total",
+            Help: "Total number of stock quote requests",
+        },
+        []string{"symbol", "status"},
+    )
+    
+    StockQuoteResponseTime = prometheus.NewHistogramVec(
+        prometheus.HistogramOpts{
+            Name:    "stock_quote_response_time_seconds",
+            Help:    "Stock quote response time in seconds",
+            Buckets: prometheus.DefBuckets,
+        },
+        []string{"symbol"},
+    )
+)
+```
+
+## Definition of Done for Each Slice
+
+### **Complete Slice Checklist**
+- [ ] **OpenAPI Specification**
+  - [ ] Complete API definition
+  - [ ] Request/response schemas
+  - [ ] Error handling
+  - [ ] Authentication/authorization
+  
+- [ ] **Backend Implementation**
+  - [ ] Service structure with go-zero
+  - [ ] Database models and migrations
+  - [ ] Business logic implementation
+  - [ ] HTTP handlers
+  - [ ] Middleware configuration
+  
+- [ ] **Frontend Implementation**
+  - [ ] React components
+  - [ ] TypeScript types
+  - [ ] API service integration
+  - [ ] State management
+  - [ ] Error handling
+  
+- [ ] **Testing (100% Coverage)**
+  - [ ] Unit tests for business logic
+  - [ ] Integration tests for APIs
+  - [ ] Component tests for UI
+  - [ ] Performance tests
+  - [ ] Security tests
+  
+- [ ] **Documentation**
+  - [ ] API documentation
+  - [ ] Component documentation
+  - [ ] Usage examples
+  - [ ] Deployment guide
+  
+- [ ] **Quality Assurance**
+  - [ ] Code review completed
+  - [ ] Security review completed
+  - [ ] Performance benchmarks met
+  - [ ] Accessibility requirements met
+  
+- [ ] **Deployment Ready**
+  - [ ] Docker containerization
+  - [ ] Environment configuration
+  - [ ] Health checks implemented
+  - [ ] Monitoring configured
+
+## Benefits of Vertical Slice Architecture
+
+### 1. **Faster Development**
+- Teams can work on slices independently
+- No cross-team coordination delays
+- Faster feedback loops
+
+### 2. **Better Testing**
+- Each slice can be tested in isolation
+- Easier to achieve 100% test coverage
+- Faster test execution
+
+### 3. **Independent Deployment**
+- Slices can be deployed separately
+- Reduced deployment risk
+- Faster time to market
+
+### 4. **Clear Ownership**
+- Each slice has clear responsibility
+- Easier to maintain and debug
+- Better team accountability
+
+### 5. **Scalability**
+- Slices can be scaled independently
+- Better resource utilization
+- Easier to optimize performance
+
+---
+
+*This architecture ensures each slice delivers complete business value while maintaining system integrity and performance.*

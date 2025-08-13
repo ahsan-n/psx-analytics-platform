@@ -1,0 +1,334 @@
+---
+description: OpenAPI development rules for PSX Analytics Platform
+globs: ["**/*.yaml", "**/*.yml", "**/openapi.json"]
+alwaysApply: false
+---
+
+# OpenAPI Development Rules - PSX Analytics Platform
+
+## OpenAPI Version & Standards
+- **OpenAPI Version**: 3.0.3 (latest stable)
+- **Schema First**: All API development starts with OpenAPI specification
+- **Code Generation**: Generate types and clients from OpenAPI specs
+- **Validation**: Contract validation at runtime and build time
+
+## Project Structure
+
+```
+api/
+├── specs/                  # OpenAPI specifications
+│   ├── auth-service.yaml  # Authentication service API
+│   ├── market-service.yaml # Market data service API
+│   ├── portfolio-service.yaml # Portfolio service API
+│   ├── analytics-service.yaml # Analytics service API
+│   └── shared/            # Shared schemas and components
+│       ├── common.yaml    # Common request/response types
+│       ├── errors.yaml    # Error response schemas
+│       └── auth.yaml      # Authentication schemas
+├── generated/              # Generated code (gitignored)
+│   ├── go/                # Go types and clients
+│   ├── typescript/        # TypeScript types and clients
+│   └── docs/              # Generated API documentation
+└── tools/                  # OpenAPI tooling and scripts
+    ├── codegen/           # Code generation scripts
+    ├── validation/        # Schema validation tools
+    └── mocks/             # Mock data generation
+```
+
+## OpenAPI Specification Standards
+
+### File Organization
+```yaml
+# Good: Well-structured OpenAPI specification
+openapi: 3.0.3
+info:
+  title: PSX Analytics Platform - Market Service API
+  version: 1.0.0
+  description: Market data and stock information service
+  contact:
+    name: API Support
+    email: api@psxanalytics.com
+  license:
+    name: Proprietary
+    url: https://psxanalytics.com/license
+
+servers:
+  - url: https://api.psxanalytics.com/v1
+    description: Production server
+  - url: https://staging-api.psxanalytics.com/v1
+    description: Staging server
+  - url: http://localhost:8080/v1
+    description: Local development
+
+paths:
+  /stocks/{symbol}/quote:
+    get:
+      summary: Get real-time stock quote
+      operationId: getStockQuote
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[A-Z]{1,5}$'
+          description: Stock symbol (1-5 uppercase letters)
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockQuoteResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  schemas:
+    StockQuote:
+      type: object
+      required:
+        - symbol
+        - price
+        - change
+        - changePercent
+        - volume
+        - lastUpdated
+      properties:
+        symbol:
+          type: string
+          description: Stock symbol
+          example: "AAPL"
+        price:
+          type: number
+          format: float
+          minimum: 0
+          description: Current stock price
+          example: 150.25
+        change:
+          type: number
+          format: float
+          description: Price change from previous close
+          example: 2.50
+        changePercent:
+          type: number
+          format: float
+          description: Percentage change from previous close
+          example: 1.69
+        volume:
+          type: integer
+          minimum: 0
+          description: Trading volume
+          example: 1500000
+        lastUpdated:
+          type: string
+          format: date-time
+          description: Last update timestamp
+          example: "2024-01-15T10:30:00Z"
+      
+    StockQuoteResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+          description: Operation success status
+          example: true
+        data:
+          $ref: '#/components/schemas/StockQuote'
+        message:
+          type: string
+          description: Optional message
+          example: "Quote retrieved successfully"
+        timestamp:
+          type: string
+          format: date-time
+          description: Response timestamp
+          example: "2024-01-15T10:30:00Z"
+
+  responses:
+    BadRequest:
+      description: Bad request - validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    
+    Forbidden:
+      description: Access forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token for authentication
+```
+
+## Schema Design Principles
+
+### Naming Conventions
+```yaml
+# Good: Consistent naming patterns
+components:
+  schemas:
+    # Use PascalCase for schema names
+    UserProfile:
+      type: object
+      properties:
+        # Use camelCase for property names
+        userId:
+          type: integer
+        firstName:
+          type: string
+        lastName:
+          type: string
+        emailAddress:
+          type: string
+        # Use descriptive names
+        accountCreatedAt:
+          type: string
+          format: date-time
+        lastLoginAt:
+          type: string
+          format: date-time
+        # Use consistent types
+        isActive:
+          type: boolean
+        subscriptionTier:
+          type: string
+          enum: [free, premium, professional, institutional]
+```
+
+### Data Types and Validation
+```yaml
+# Good: Proper data types and validation
+components:
+  schemas:
+    StockOrder:
+      type: object
+      required:
+        - symbol
+        - quantity
+        - orderType
+        - side
+      properties:
+        symbol:
+          type: string
+          pattern: '^[A-Z]{1,5}$'
+          minLength: 1
+          maxLength: 5
+          description: Stock symbol (1-5 uppercase letters)
+          example: "AAPL"
+        
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 1000000
+          description: Number of shares to trade
+          example: 100
+        
+        orderType:
+          type: string
+          enum: [market, limit, stop, stop_limit]
+          description: Type of order
+          example: "limit"
+        
+        side:
+          type: string
+          enum: [buy, sell]
+          description: Order side
+          example: "buy"
+        
+        limitPrice:
+          type: number
+          format: float
+          minimum: 0.01
+          maximum: 10000.00
+          description: Limit price for limit orders
+          example: 150.00
+        
+        timeInForce:
+          type: string
+          enum: [day, gtc, ioc, fok]
+          default: "day"
+          description: Time in force for the order
+          example: "day"
+```
+
+## Code Generation
+
+### Go Code Generation
+```bash
+# Generate Go types and client from OpenAPI spec
+#go:generate go run github.com/deepmap/oapi-codegen/cmd/oapi-codegen --package=api --generate=types,spec,server,client api/specs/market-service.yaml
+
+# Generate go-zero API service
+goctl api go -api api/specs/market-service.yaml -dir backend/market-service
+```
+
+### TypeScript Code Generation
+```bash
+# Generate TypeScript types and client
+npx @openapitools/openapi-generator-cli generate \
+  -i api/specs/market-service.yaml \
+  -g typescript-fetch \
+  -o frontend/src/generated/api \
+  --additional-properties=supportsES6=true,typescriptThreePlus=true
+```
+
+### Documentation Generation
+```bash
+# Generate HTML documentation
+npx @redocly/cli build-docs api/specs/market-service.yaml -o docs/api.html
+
+# Generate Markdown documentation
+npx @redocly/cli build-docs api/specs/market-service.yaml -o docs/api.md
+```
+
+## Definition of Done for OpenAPI Specifications
+- [ ] OpenAPI 3.0.3 specification complete
+- [ ] All endpoints documented with proper HTTP methods
+- [ ] Request/response schemas defined and validated
+- [ ] Error responses documented for all endpoints
+- [ ] Authentication and authorization defined
+- [ ] Examples provided for all schemas
+- [ ] Schema validation rules implemented
+- [ ] Code generation working for Go and TypeScript
+- [ ] API documentation generated and reviewed
+- [ ] Contract validation tests passing
+- [ ] Backend and frontend integration complete
+- [ ] API versioning strategy defined
+- [ ] Rate limiting and throttling documented
+- [ ] Security review completed
