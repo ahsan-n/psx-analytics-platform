@@ -22,6 +22,7 @@ class PSXAdapter {
   private baseUrl: string;
   private defaultOptions: PSXHttpOptions;
   private kse100Symbols: Set<string> | null = null;
+  private kse100Metrics: Map<string, { current: number; changePct: number; marketCapM: number }> | null = null;
 
   constructor(baseUrl = PSX_BASE_URL, options: PSXHttpOptions = {}) {
     this.baseUrl = baseUrl;
@@ -34,19 +35,36 @@ class PSXAdapter {
 
   private async ensureKSE100SymbolsLoaded(): Promise<Set<string>> {
     if (this.kse100Symbols && this.kse100Symbols.size > 0) return this.kse100Symbols;
+    await this.loadKSE100Metrics();
+    this.kse100Symbols = new Set(this.kse100Metrics ? Array.from(this.kse100Metrics.keys()) : []);
+    return this.kse100Symbols;
+  }
+
+  private async loadKSE100Metrics(): Promise<void> {
+    // Fetch KSE100 constituents page and parse symbol, current, change%, market cap (M)
     const response = await this.fetchWithRetry(`${this.baseUrl}/indices/KSE100`);
     const html = await response.text();
-    const symbols: string[] = [];
+    const metrics = new Map<string, { current: number; changePct: number; marketCapM: number }>();
     const tbodyMatch = html.match(/<tbody[^>]*>([\s\S]*?)<\/tbody>/);
     if (tbodyMatch) {
       const rows = tbodyMatch[1].match(/<tr[^>]*>([\s\S]*?)<\/tr>/g) || [];
       for (const row of rows) {
         const symMatch = row.match(/<strong>([^<]+)<\/strong>/);
-        if (symMatch && symMatch[1]) symbols.push(symMatch[1].trim().toUpperCase());
+        const symbol = symMatch && symMatch[1] ? symMatch[1].trim().toUpperCase() : '';
+        if (!symbol) continue;
+        // Collect all numeric right-tds
+        const rightTds = Array.from(row.matchAll(/<td[^>]*class="[^"]*right[^"]*"[^>]*>([\s\S]*?)<\/td>/g)).map(m => m[1]);
+        // Extract numeric from inner text by stripping tags/commas
+        const nums = rightTds.map(txt => parseFloat(txt.replace(/<[^>]*>/g, '').replace(/,/g, '').replace(/%/g, '')));
+        // According to header on KSE100 page:
+        // LDCP, CURRENT, CHANGE, CHANGE(%), IDX WTG(%), IDX POINT, VOLUME, FREEFLOAT (M), MARKET CAP (M)
+        const current = nums[1] || 0;
+        const changePct = nums[3] || 0;
+        const marketCapM = nums[nums.length - 1] || 0; // last is Market Cap (M)
+        metrics.set(symbol, { current, changePct, marketCapM });
       }
     }
-    this.kse100Symbols = new Set(symbols);
-    return this.kse100Symbols;
+    this.kse100Metrics = metrics;
   }
 
   private async fetchWithRetry(url: string, options: RequestInit = {}): Promise<Response> {
@@ -105,28 +123,32 @@ class PSXAdapter {
     const parsed = this.parseSectorHtml(rawData);
     if (index && index.toUpperCase() === 'KSE100') {
       // Recompute sector stats using only KSE-100 companies
+      await this.loadKSE100Metrics();
       const kset = await this.ensureKSE100SymbolsLoaded();
       const allCompanies = await this.getCompanies({ limit: 10000 });
       const allList = allCompanies.companies || [];
       const kseCompanies = allList.filter(c => kset.has((c.symbol || '').toUpperCase()));
 
-      const sectorMap = new Map<string, { count: number; marketCap: number; totalPE: number; perfSum: number }>();
-      let totalMarketCap = 0;
+      const sectorMap = new Map<string, { count: number; marketCapM: number; totalPE: number; perfSum: number }>();
+      let totalMarketCapM = 0;
       for (const c of kseCompanies) {
         const sector = c.sector || 'Unknown';
-        if (!sectorMap.has(sector)) sectorMap.set(sector, { count: 0, marketCap: 0, totalPE: 0, perfSum: 0 });
+        if (!sectorMap.has(sector)) sectorMap.set(sector, { count: 0, marketCapM: 0, totalPE: 0, perfSum: 0 });
         const s = sectorMap.get(sector)!;
         s.count += 1;
-        s.marketCap += c.marketCap || 0;
+        // Prefer exact market cap from KSE100 metrics when available
+        const m = this.kse100Metrics?.get((c.symbol || '').toUpperCase());
+        const marketCapM = m ? m.marketCapM : (c.marketCap ? c.marketCap / 1_000_000 : 0);
+        s.marketCapM += marketCapM || 0;
         s.totalPE += c.pe || 0;
         s.perfSum += c.change || 0;
-        totalMarketCap += c.marketCap || 0;
+        totalMarketCapM += marketCapM || 0;
       }
 
       const sectors = Array.from(sectorMap.entries()).map(([name, s]) => ({
         name,
-        marketCap: s.marketCap,
-        percentage: totalMarketCap > 0 ? (s.marketCap / totalMarketCap) * 100 : 0,
+        marketCap: s.marketCapM, // in PKR millions
+        percentage: totalMarketCapM > 0 ? (s.marketCapM / totalMarketCapM) * 100 : 0,
         companiesCount: s.count,
         avgPE: s.count > 0 ? s.totalPE / s.count : 0,
         performance1M: s.count > 0 ? s.perfSum / s.count : 0,
@@ -134,7 +156,7 @@ class PSXAdapter {
 
       return {
         sectors: sectors.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0)),
-        totalMarketCap,
+        totalMarketCap: totalMarketCapM,
         lastUpdated: new Date().toISOString(),
       };
     }
@@ -171,7 +193,13 @@ class PSXAdapter {
           cell.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
         );
 
-        const [sectorCode, sectorName, advance, decline, unchanged] = cells;
+        // sector table may include Turnover and Market Cap (B) at the end
+        const sectorCode = cells[0];
+        const sectorName = cells[1];
+        const advance = cells[2];
+        const decline = cells[3];
+        const unchanged = cells[4];
+        const marketCapBText = cells[cells.length - 1];
         
         if (sectorName && sectorName !== 'Sector Name' && sectorName.length > 0) {
           // Calculate companies count from PSX data
@@ -185,18 +213,23 @@ class PSXAdapter {
             ? ((advanceCount - declineCount) / totalCompanies) * 5 // Scale to reasonable percentage
             : 0;
           
+          const marketCapB = parseFloat((marketCapBText || '0').replace(/,/g, '')) || 0;
           sectors.push({
             name: sectorName,
-            marketCap: Math.floor(Math.random() * 2000000 + 500000), // Placeholder - not available in sector summary
-            percentage: Math.floor(Math.random() * 25 + 2), // Placeholder - would need market cap data
+            marketCap: marketCapB * 1000, // convert B to M to match schema description
+            percentage: 0, // will be filled after total computed if needed
             companiesCount: totalCompanies || 1,
-            avgPE: Math.floor(Math.random() * 20 + 5), // Placeholder - not available in sector summary
+            avgPE: 0,
             performance1M: Math.round(performance1M * 100) / 100
           });
         }
       }
 
       const totalMarketCap = sectors.reduce((sum, s) => sum + (s.marketCap || 0), 0);
+      // back-fill percentage now that we know total
+      for (const s of sectors) {
+        s.percentage = totalMarketCap > 0 ? ((s.marketCap || 0) / totalMarketCap) * 100 : 0;
+      }
 
       return {
         sectors,
@@ -236,14 +269,37 @@ class PSXAdapter {
     console.log('PSX Companies Raw Data (first 500 chars):', rawData.substring(0, 500));
 
     // Parse
-    const parsed = this.parseCompaniesHtml(rawData, params);
+    const parsedAll = this.parseCompaniesHtml(rawData, {});
+    const allList = parsedAll.companies || [];
     if (params.index && params.index.toUpperCase() === 'KSE100') {
+      await this.loadKSE100Metrics();
       const kset = await this.ensureKSE100SymbolsLoaded();
-      const list = parsed.companies || [];
-      const filtered = list.filter(c => kset.has((c.symbol || '').toUpperCase()));
-      return { ...parsed, companies: filtered, total: filtered.length };
+      const filtered = allList.filter(c => kset.has((c.symbol || '').toUpperCase()));
+      // Enrich with metrics from KSE100 page
+      const enriched = filtered.map(c => {
+        const m = this.kse100Metrics?.get((c.symbol || '').toUpperCase());
+        return {
+          ...c,
+          price: m ? m.current : c.price,
+          change: m ? m.changePct : c.change,
+          marketCap: m ? m.marketCapM : c.marketCap, // already in M
+        };
+      });
+      const page = params.page || 1;
+      const limit = params.limit || 20;
+      const startIndex = (page - 1) * limit;
+      const companies = enriched.slice(startIndex, startIndex + limit);
+      return { companies, total: enriched.length, page, limit };
     }
-    return parsed;
+    // Non-index case: apply optional sector filter then paginate
+    const sectorFiltered = params.sector
+      ? allList.filter(c => (c.sector || '').toLowerCase().includes((params.sector || '').toLowerCase()))
+      : allList;
+    const page = params.page || 1;
+    const limit = params.limit || 20;
+    const startIndex = (page - 1) * limit;
+    const companies = sectorFiltered.slice(startIndex, startIndex + limit);
+    return { companies, total: sectorFiltered.length, page, limit };
   }
 
   private parseCompaniesHtml(html: string, params: {
@@ -316,17 +372,12 @@ class PSXAdapter {
         ? allCompanies.filter(company => company.sector?.toLowerCase().includes(params.sector?.toLowerCase() || ''))
         : allCompanies;
 
-      // Apply pagination
-      const page = params.page || 1;
-      const limit = params.limit || 20;
-      const startIndex = (page - 1) * limit;
-      const companies = filteredCompanies.slice(startIndex, startIndex + limit);
-
+      // Return all companies here; callers will paginate
       return {
-        companies,
+        companies: filteredCompanies,
         total: filteredCompanies.length,
-        page,
-        limit
+        page: 1,
+        limit: filteredCompanies.length
       };
     } catch (error) {
       console.error('Error parsing PSX companies HTML:', error);
