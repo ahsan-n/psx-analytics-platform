@@ -4,9 +4,9 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { symbol: string } }
+  { params }: { params: Promise<{ symbol: string }> }
 ) {
-  const { symbol } = params;
+  const { symbol } = await params;
 
   // Mock company analytics data - in real app this would come from database
   const mockCompanyData: Record<string, any> = {
