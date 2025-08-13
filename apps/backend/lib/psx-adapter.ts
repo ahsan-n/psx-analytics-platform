@@ -76,18 +76,16 @@ class PSXAdapter {
    * Maps to: GET https://dps.psx.com.pk/sector-summary/sectorwise
    */
   async getSectorBreakdown(): Promise<SectorBreakdownResponse> {
-    try {
-      const response = await this.fetchWithRetry(`${this.baseUrl}/sector-summary/sectorwise`);
-      const rawData = await response.text();
+    const response = await this.fetchWithRetry(`${this.baseUrl}/sector-summary/sectorwise`);
+    const rawData = await response.text();
 
-      // PSX returns HTML table, we need to parse it
-      // For now, return normalized mock data structure
-      // TODO: Parse HTML table or find JSON endpoint
-      return this.normalizeSectorData(rawData);
-    } catch (error) {
-      console.error('PSX sector data fetch failed:', error);
-      throw error;
-    }
+    console.log('PSX Sector Response Status:', response.status);
+    console.log('PSX Sector Response Headers:', Object.fromEntries(response.headers.entries()));
+    console.log('PSX Sector Raw Data (first 500 chars):', rawData.substring(0, 500));
+
+    // PSX returns HTML table, we need to parse it
+    // For now, throw error to see what we're getting
+    throw new Error(`PSX sector data parsing not implemented. Response: ${rawData.substring(0, 200)}...`);
   }
 
   /**
@@ -100,16 +98,15 @@ class PSXAdapter {
     page?: number;
     limit?: number;
   } = {}): Promise<CompaniesResponse> {
-    try {
-      const response = await this.fetchWithRetry(`${this.baseUrl}/listings-table/main/nc`);
-      const rawData = await response.text();
+    const response = await this.fetchWithRetry(`${this.baseUrl}/listings-table/main/nc`);
+    const rawData = await response.text();
 
-      // PSX returns HTML table, parse and normalize
-      return this.normalizeCompaniesData(rawData, params);
-    } catch (error) {
-      console.error('PSX companies data fetch failed:', error);
-      throw error;
-    }
+    console.log('PSX Companies Response Status:', response.status);
+    console.log('PSX Companies Response Headers:', Object.fromEntries(response.headers.entries()));
+    console.log('PSX Companies Raw Data (first 500 chars):', rawData.substring(0, 500));
+
+    // PSX returns HTML table, parse and normalize
+    throw new Error(`PSX companies data parsing not implemented. Response: ${rawData.substring(0, 200)}...`);
   }
 
   /**
@@ -117,17 +114,16 @@ class PSXAdapter {
    * Maps to: Multiple PSX endpoints for a given symbol
    */
   async getCompanyAnalytics(symbol: string): Promise<CompanyAnalyticsResponse> {
-    try {
-      // We'd need multiple calls to get full company data
-      // For now, use a simplified approach
-      const response = await this.fetchWithRetry(`${this.baseUrl}/company/${symbol}`);
-      const rawData = await response.text();
+    // We'd need multiple calls to get full company data
+    // For now, use a simplified approach
+    const response = await this.fetchWithRetry(`${this.baseUrl}/company/${symbol}`);
+    const rawData = await response.text();
 
-      return this.normalizeCompanyData(symbol, rawData);
-    } catch (error) {
-      console.error(`PSX company data fetch failed for ${symbol}:`, error);
-      throw error;
-    }
+    console.log(`PSX Company ${symbol} Response Status:`, response.status);
+    console.log(`PSX Company ${symbol} Response Headers:`, Object.fromEntries(response.headers.entries()));
+    console.log(`PSX Company ${symbol} Raw Data (first 500 chars):`, rawData.substring(0, 500));
+
+    throw new Error(`PSX company data parsing not implemented for ${symbol}. Response: ${rawData.substring(0, 200)}...`);
   }
 
   /**
@@ -135,12 +131,20 @@ class PSXAdapter {
    * Maps to: GET https://dps.psx.com.pk/symbols
    */
   async getSymbols() {
+    const response = await this.fetchWithRetry(`${this.baseUrl}/symbols`);
+    const rawData = await response.text();
+
+    console.log('PSX Symbols Response Status:', response.status);
+    console.log('PSX Symbols Response Headers:', Object.fromEntries(response.headers.entries()));
+    console.log('PSX Symbols Raw Data (first 500 chars):', rawData.substring(0, 500));
+
+    // Try to parse as JSON first
     try {
-      const response = await this.fetchWithRetry(`${this.baseUrl}/symbols`);
-      return await response.json();
-    } catch (error) {
-      console.error('PSX symbols fetch failed:', error);
-      throw error;
+      const jsonData = JSON.parse(rawData);
+      console.log('PSX Symbols JSON Data (first 3 items):', jsonData.slice(0, 3));
+      return jsonData;
+    } catch (e) {
+      throw new Error(`PSX symbols data is not JSON. Response: ${rawData.substring(0, 200)}...`);
     }
   }
 
