@@ -1,0 +1,548 @@
+openapi: 3.0.3
+info:
+  title: PSX Analytics Platform - Sector Service API
+  version: 1.0.0
+  description: |
+    Comprehensive sector analysis service for Pakistan Stock Exchange (PSX).
+    Provides sector-wise performance metrics, comparisons, and analytics.
+  contact:
+    name: PSX Analytics Platform
+    email: support@psxanalytics.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8001/api/v1
+    description: Development server
+  - url: https://api.psxanalytics.com/v1
+    description: Production server
+
+tags:
+  - name: sectors
+    description: Sector analysis and performance metrics
+  - name: health
+    description: Service health checks
+
+paths:
+  /health:
+    get:
+      tags:
+        - health
+      summary: Health check endpoint
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /sectors:
+    get:
+      tags:
+        - sectors
+      summary: Get all PSX sectors overview
+      operationId: getAllSectors
+      parameters:
+        - name: timeframe
+          in: query
+          description: Performance timeframe
+          required: false
+          schema:
+            type: string
+            enum: [1D, 1W, 1M, 3M, 6M, 1Y]
+            default: 1D
+        - name: sort_by
+          in: query
+          description: Sort sectors by metric
+          required: false
+          schema:
+            type: string
+            enum: [market_cap, performance, volume, company_count]
+            default: market_cap
+        - name: sort_order
+          in: query
+          description: Sort order
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: List of all PSX sectors with performance metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SectorsOverviewResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /sectors/{sectorId}:
+    get:
+      tags:
+        - sectors
+      summary: Get detailed sector analysis
+      operationId: getSectorDetails
+      parameters:
+        - name: sectorId
+          in: path
+          required: true
+          description: Sector identifier
+          schema:
+            type: string
+            example: banking-finance
+        - name: timeframe
+          in: query
+          description: Analysis timeframe
+          required: false
+          schema:
+            type: string
+            enum: [1D, 1W, 1M, 3M, 6M, 1Y, 3Y, 5Y]
+            default: 1M
+      responses:
+        '200':
+          description: Detailed sector analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SectorDetailResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /sectors/{sectorId}/companies:
+    get:
+      tags:
+        - sectors
+      summary: Get top companies in sector
+      operationId: getSectorCompanies
+      parameters:
+        - name: sectorId
+          in: path
+          required: true
+          description: Sector identifier
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Number of companies to return
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+        - name: sort_by
+          in: query
+          description: Sort companies by metric
+          required: false
+          schema:
+            type: string
+            enum: [market_cap, performance, volume, pe_ratio]
+            default: market_cap
+      responses:
+        '200':
+          description: Top companies in the sector
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SectorCompaniesResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /sectors/compare:
+    post:
+      tags:
+        - sectors
+      summary: Compare multiple sectors
+      operationId: compareSectors
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SectorCompareRequest'
+      responses:
+        '200':
+          description: Sector comparison results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SectorCompareResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "healthy"
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+          example: "1.0.0"
+
+    SectorsOverviewResponse:
+      type: object
+      properties:
+        sectors:
+          type: array
+          items:
+            $ref: '#/components/schemas/SectorOverview'
+        market_summary:
+          $ref: '#/components/schemas/MarketSummary'
+        last_updated:
+          type: string
+          format: date-time
+
+    SectorOverview:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "banking-finance"
+        name:
+          type: string
+          example: "Banking & Finance"
+        market_cap:
+          type: number
+          format: double
+          description: Total market capitalization in PKR
+          example: 1250000000000
+        market_cap_percentage:
+          type: number
+          format: double
+          description: Percentage of total market
+          example: 25.5
+        performance:
+          $ref: '#/components/schemas/PerformanceMetrics'
+        company_count:
+          type: integer
+          example: 35
+        volume_today:
+          type: number
+          format: double
+          example: 45000000
+        turnover_today:
+          type: number
+          format: double
+          example: 2500000000
+        top_companies:
+          type: array
+          items:
+            $ref: '#/components/schemas/TopCompany'
+          maxItems: 3
+
+    SectorDetailResponse:
+      type: object
+      properties:
+        sector:
+          $ref: '#/components/schemas/SectorDetail'
+        performance_chart:
+          $ref: '#/components/schemas/PerformanceChart'
+        financial_metrics:
+          $ref: '#/components/schemas/SectorFinancialMetrics'
+        companies:
+          type: array
+          items:
+            $ref: '#/components/schemas/SectorCompany'
+
+    SectorDetail:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        market_cap:
+          type: number
+          format: double
+        market_cap_percentage:
+          type: number
+          format: double
+        company_count:
+          type: integer
+        performance:
+          $ref: '#/components/schemas/PerformanceMetrics'
+        volume_metrics:
+          $ref: '#/components/schemas/VolumeMetrics'
+        volatility:
+          type: number
+          format: double
+          description: 30-day volatility percentage
+        beta:
+          type: number
+          format: double
+          description: Sector beta relative to KSE-100
+
+    PerformanceMetrics:
+      type: object
+      properties:
+        current_change:
+          type: number
+          format: double
+          description: Current day change percentage
+        one_week:
+          type: number
+          format: double
+        one_month:
+          type: number
+          format: double
+        three_months:
+          type: number
+          format: double
+        six_months:
+          type: number
+          format: double
+        one_year:
+          type: number
+          format: double
+        ytd:
+          type: number
+          format: double
+          description: Year-to-date performance
+
+    VolumeMetrics:
+      type: object
+      properties:
+        today_volume:
+          type: number
+          format: double
+        avg_volume_30d:
+          type: number
+          format: double
+        today_turnover:
+          type: number
+          format: double
+        avg_turnover_30d:
+          type: number
+          format: double
+
+    SectorFinancialMetrics:
+      type: object
+      properties:
+        avg_pe_ratio:
+          type: number
+          format: double
+        avg_pb_ratio:
+          type: number
+          format: double
+        avg_dividend_yield:
+          type: number
+          format: double
+        avg_roe:
+          type: number
+          format: double
+        avg_debt_to_equity:
+          type: number
+          format: double
+        median_market_cap:
+          type: number
+          format: double
+
+    TopCompany:
+      type: object
+      properties:
+        symbol:
+          type: string
+          example: "HBL"
+        name:
+          type: string
+          example: "Habib Bank Limited"
+        market_cap:
+          type: number
+          format: double
+        current_price:
+          type: number
+          format: double
+        change_percent:
+          type: number
+          format: double
+
+    SectorCompany:
+      type: object
+      properties:
+        symbol:
+          type: string
+        name:
+          type: string
+        market_cap:
+          type: number
+          format: double
+        market_cap_percentage:
+          type: number
+          format: double
+          description: Percentage of sector market cap
+        current_price:
+          type: number
+          format: double
+        change_percent:
+          type: number
+          format: double
+        volume:
+          type: number
+          format: double
+        pe_ratio:
+          type: number
+          format: double
+        pb_ratio:
+          type: number
+          format: double
+
+    MarketSummary:
+      type: object
+      properties:
+        total_market_cap:
+          type: number
+          format: double
+        kse100_index:
+          type: number
+          format: double
+        kse100_change:
+          type: number
+          format: double
+        total_volume:
+          type: number
+          format: double
+        total_turnover:
+          type: number
+          format: double
+        advance_decline_ratio:
+          type: number
+          format: double
+
+    PerformanceChart:
+      type: object
+      properties:
+        timeframe:
+          type: string
+        data_points:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChartDataPoint'
+
+    ChartDataPoint:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        value:
+          type: number
+          format: double
+        volume:
+          type: number
+          format: double
+
+    SectorCompaniesResponse:
+      type: object
+      properties:
+        sector_id:
+          type: string
+        sector_name:
+          type: string
+        companies:
+          type: array
+          items:
+            $ref: '#/components/schemas/SectorCompany'
+        total_count:
+          type: integer
+
+    SectorCompareRequest:
+      type: object
+      required:
+        - sector_ids
+      properties:
+        sector_ids:
+          type: array
+          items:
+            type: string
+          minItems: 2
+          maxItems: 5
+        timeframe:
+          type: string
+          enum: [1D, 1W, 1M, 3M, 6M, 1Y]
+          default: 1M
+        metrics:
+          type: array
+          items:
+            type: string
+            enum: [performance, market_cap, volume, pe_ratio, pb_ratio, dividend_yield]
+          default: [performance, market_cap]
+
+    SectorCompareResponse:
+      type: object
+      properties:
+        comparison:
+          type: array
+          items:
+            $ref: '#/components/schemas/SectorComparison'
+        timeframe:
+          type: string
+        generated_at:
+          type: string
+          format: date-time
+
+    SectorComparison:
+      type: object
+      properties:
+        sector:
+          $ref: '#/components/schemas/SectorOverview'
+        metrics:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+        rank:
+          type: integer
+          description: Rank in comparison (1 = best)
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code
+        timestamp:
+          type: string
+          format: date-time
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
