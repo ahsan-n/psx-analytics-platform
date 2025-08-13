@@ -97,8 +97,8 @@ export interface components {
       companiesCount?: number;
       /** @description Average P/E ratio */
       avgPE?: number;
-      /** @description 1-month performance percentage */
-      performance1M?: number;
+      /** @description Cap-weighted 1-day percentage change */
+      change1D?: number;
     };
     CompaniesResponse: {
       companies?: components["schemas"]["CompanyBasic"][];

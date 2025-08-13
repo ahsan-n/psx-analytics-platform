@@ -334,9 +334,9 @@ components:
         avgPE:
           type: number
           description: Average P/E ratio
-        performance1M:
+        change1D:
           type: number
-          description: 1-month performance percentage
+          description: Cap-weighted 1-day percentage change
     
     CompaniesResponse:
       type: object

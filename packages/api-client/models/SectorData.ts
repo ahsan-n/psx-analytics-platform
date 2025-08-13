@@ -20,9 +20,5 @@ export type SectorData = {
      * Average P/E ratio
      */
     avgPE?: number;
-    /**
-     * 1-month performance percentage
-     */
-    performance1M?: number;
 };
 

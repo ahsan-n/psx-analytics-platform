@@ -168,11 +168,11 @@ class PSXAdapter {
       // Prefetch fundamentals (P/E) for all KSE100 companies; cached for subsequent requests
       await Promise.all(kseCompanies.map(c => c.symbol ? this.loadCompanyFundamentals(c.symbol) : Promise.resolve({}))); 
 
-      const sectorMap = new Map<string, { count: number; marketCapM: number; totalPE: number; peCount: number; perfSum: number }>();
+      const sectorMap = new Map<string, { count: number; marketCapM: number; totalPE: number; peCount: number; weightedChangeNumerator: number }>();
       let totalMarketCapM = 0;
       for (const c of kseCompanies) {
         const sector = c.sector || 'Unknown';
-        if (!sectorMap.has(sector)) sectorMap.set(sector, { count: 0, marketCapM: 0, totalPE: 0, peCount: 0, perfSum: 0 });
+        if (!sectorMap.has(sector)) sectorMap.set(sector, { count: 0, marketCapM: 0, totalPE: 0, peCount: 0, weightedChangeNumerator: 0 });
         const s = sectorMap.get(sector)!;
         s.count += 1;
         const sym = (c.symbol || '').toUpperCase();
@@ -186,8 +186,10 @@ class PSXAdapter {
           s.totalPE += f.pe;
           s.peCount += 1;
         }
-        // Use changePct from constituents table for performance
-        s.perfSum += (m ? m.changePct : 0);
+        // Use changePct from constituents table; accumulate cap-weighted numerator (sum(change% * cap))
+        if (m && !Number.isNaN(m.changePct)) {
+          s.weightedChangeNumerator += (m.changePct || 0) * (marketCapM || 0);
+        }
         totalMarketCapM += marketCapM || 0;
       }
 
@@ -197,7 +199,7 @@ class PSXAdapter {
         percentage: totalMarketCapM > 0 ? (s.marketCapM / totalMarketCapM) * 100 : 0,
         companiesCount: s.count,
         avgPE: s.peCount > 0 ? s.totalPE / s.peCount : 0,
-        performance1M: s.count > 0 ? s.perfSum / s.count : 0,
+        change1D: s.marketCapM > 0 ? (s.weightedChangeNumerator / s.marketCapM) : 0,
       }));
 
       return {
@@ -255,9 +257,6 @@ class PSXAdapter {
           const totalCompanies = advanceCount + declineCount + unchangedCount;
           
           // Calculate performance based on advance/decline ratio
-          const performance1M = totalCompanies > 0 
-            ? ((advanceCount - declineCount) / totalCompanies) * 5 // Scale to reasonable percentage
-            : 0;
           
           const marketCapB = parseFloat((marketCapBText || '0').replace(/,/g, '')) || 0;
           sectors.push({
@@ -266,7 +265,6 @@ class PSXAdapter {
             percentage: 0, // will be filled after total computed if needed
             companiesCount: totalCompanies || 1,
             avgPE: 0,
-            performance1M: Math.round(performance1M * 100) / 100
           });
         }
       }
