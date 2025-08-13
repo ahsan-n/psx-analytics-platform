@@ -20,7 +20,7 @@ export default function DashboardPage() {
         OpenAPI.BASE = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
         const [sectorsResponse, companiesResponse] = await Promise.all([
           DefaultService.getSectorBreakdown({ index: 'KSE100' }),
-          DefaultService.getCompanies({ index: 'KSE100', limit: 10 })
+          DefaultService.getCompanies({ index: 'KSE100', limit: 10000 })
         ]);
 
         setSectorData(sectorsResponse);
@@ -121,9 +121,15 @@ export default function DashboardPage() {
         )}
 
         {/* Top Companies */}
-        {companiesData && (
+        {companiesData && sectorData && (
           <div className="mb-8">
-            <CompaniesTable data={companiesData} title="Top Companies" />
+            <CompaniesTable 
+              data={companiesData} 
+              title="Top Companies"
+              sectorAvgPeByName={Object.fromEntries(
+                (sectorData.sectors || []).map(s => [s.name, s.avgPE || 0])
+              )}
+            />
           </div>
         )}
       </div>
