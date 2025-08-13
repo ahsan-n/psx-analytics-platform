@@ -23,7 +23,7 @@ class PSXAdapter {
   private defaultOptions: PSXHttpOptions;
   private kse100Symbols: Set<string> | null = null;
   private kse100Metrics: Map<string, { current: number; changePct: number; marketCapM: number }> | null = null;
-  private companyFundamentals: Map<string, { pe?: number; marketCapM?: number; epsTTM?: number }> = new Map();
+  private companyFundamentals: Map<string, { pe?: number; marketCapM?: number; epsTTM?: number; priceCurrent?: number }> = new Map();
   private companyShares: Map<string, number> = new Map();
 
   constructor(baseUrl = PSX_BASE_URL, options: PSXHttpOptions = {}) {
@@ -69,7 +69,7 @@ class PSXAdapter {
     this.kse100Metrics = metrics;
   }
 
-  private async loadCompanyFundamentals(symbol: string): Promise<{ pe?: number; marketCapM?: number; epsTTM?: number }> {
+  private async loadCompanyFundamentals(symbol: string): Promise<{ pe?: number; marketCapM?: number; epsTTM?: number; priceCurrent?: number }> {
     const upper = (symbol || '').toUpperCase();
     const cached = this.companyFundamentals.get(upper);
     if (cached && (cached.pe !== undefined || cached.marketCapM !== undefined)) return cached;
@@ -80,6 +80,7 @@ class PSXAdapter {
     let pe: number | undefined;
     let marketCapM: number | undefined;
     let epsTTM: number | undefined;
+    let priceCurrent: number | undefined;
 
     try {
       // P/E Ratio (TTM) **
@@ -108,6 +109,15 @@ class PSXAdapter {
       }
     } catch {}
 
+    // Try to extract current price from company page (fallback source for non-KSE100)
+    try {
+      const p = html.match(/Rs\.?\s*([\d,.]+)/i);
+      if (p && p[1]) {
+        const v = parseFloat(p[1].replace(/,/g, ''));
+        if (!Number.isNaN(v)) priceCurrent = v;
+      }
+    } catch {}
+
     try {
       // Market Cap may appear with varying units/labels. Capture nearby label and value, then scale to millions.
       const mcGeneric = html.match(/(Market\s*Cap[^<]{0,50})[\s\S]*?<div[^>]*class="stats_value"[^>]*>([\d.,]+)<\/div>/i);
@@ -130,7 +140,7 @@ class PSXAdapter {
       }
     } catch {}
 
-    const result = { pe, marketCapM, epsTTM };
+    const result = { pe, marketCapM, epsTTM, priceCurrent };
     this.companyFundamentals.set(upper, result);
     return result;
   }
@@ -237,25 +247,30 @@ class PSXAdapter {
         for (const c of universe) {
           const sym = (c.symbol || '').toUpperCase();
           const f = this.companyFundamentals.get(sym);
-          // Aggregate P/E methodology with computed market cap: 
-          // MarketCap(M) = price × shares / 1_000_000 (prefer), else fallback to parsed marketCapM
+          if (!f) continue;
+          // Prefer computed cap from price × shares; fallback to parsed marketCapM
           const shares = this.companyShares.get(sym) || 0;
           const k = this.kse100Metrics?.get(sym);
-          const priceForCap = k?.current || 0;
+          const priceForCap = (k?.current || (f.priceCurrent || 0));
           let capM = 0;
           if (shares > 0 && priceForCap > 0) {
             capM = (shares * priceForCap) / 1_000_000;
-          } else if (f && typeof f.marketCapM === 'number' && !Number.isNaN(f.marketCapM) && f.marketCapM > 0) {
+          } else if (typeof f.marketCapM === 'number' && !Number.isNaN(f.marketCapM) && f.marketCapM > 0) {
             capM = f.marketCapM;
           }
-          if (capM > 0 && f && typeof f.pe === 'number' && !Number.isNaN(f.pe) && f.pe > 0 && f.pe < 200) {
+          // Compute earnings: prefer EPS(TTM)*shares; fallback to cap/PE
+          let earningsM = 0;
+          if (typeof f.epsTTM === 'number' && !Number.isNaN(f.epsTTM) && f.epsTTM > 0 && shares > 0) {
+            earningsM = (f.epsTTM * shares) / 1_000_000;
+          } else if (typeof f.pe === 'number' && !Number.isNaN(f.pe) && f.pe > 0 && f.pe < 200 && capM > 0) {
+            earningsM = capM / f.pe;
+          }
+          if (capM > 0 && earningsM > 0) {
             sumMarketCapM += capM;
-            if (typeof f.epsTTM === 'number' && !Number.isNaN(f.epsTTM) && f.epsTTM > 0 && shares > 0) {
-              sumEarningsM += (f.epsTTM * shares) / 1_000_000; // earnings to millions
-            } else {
-              sumEarningsM += (capM / f.pe);
-            }
-            peList.push(f.pe);
+            sumEarningsM += earningsM;
+            // Track implied PE for fallback averaging if needed
+            const impliedPE = (f.pe && f.pe > 0 && f.pe < 200) ? f.pe : (capM / earningsM);
+            if (!Number.isNaN(impliedPE) && impliedPE > 0 && impliedPE < 400) peList.push(impliedPE);
           }
         }
         let avg = sumEarningsM > 0 ? (sumMarketCapM / sumEarningsM) : 0;
