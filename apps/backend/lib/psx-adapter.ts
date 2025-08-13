@@ -23,7 +23,8 @@ class PSXAdapter {
   private defaultOptions: PSXHttpOptions;
   private kse100Symbols: Set<string> | null = null;
   private kse100Metrics: Map<string, { current: number; changePct: number; marketCapM: number }> | null = null;
-  private companyFundamentals: Map<string, { pe?: number; marketCapM?: number }> = new Map();
+  private companyFundamentals: Map<string, { pe?: number; marketCapM?: number; epsTTM?: number }> = new Map();
+  private companyShares: Map<string, number> = new Map();
 
   constructor(baseUrl = PSX_BASE_URL, options: PSXHttpOptions = {}) {
     this.baseUrl = baseUrl;
@@ -68,7 +69,7 @@ class PSXAdapter {
     this.kse100Metrics = metrics;
   }
 
-  private async loadCompanyFundamentals(symbol: string): Promise<{ pe?: number; marketCapM?: number }> {
+  private async loadCompanyFundamentals(symbol: string): Promise<{ pe?: number; marketCapM?: number; epsTTM?: number }> {
     const upper = (symbol || '').toUpperCase();
     const cached = this.companyFundamentals.get(upper);
     if (cached && (cached.pe !== undefined || cached.marketCapM !== undefined)) return cached;
@@ -78,6 +79,7 @@ class PSXAdapter {
 
     let pe: number | undefined;
     let marketCapM: number | undefined;
+    let epsTTM: number | undefined;
 
     try {
       // P/E Ratio (TTM) **
@@ -88,17 +90,36 @@ class PSXAdapter {
     } catch {}
 
     try {
-      // Market Cap (000's) in equity section → convert to millions
-      const mcMatch = html.match(/Market\s*Cap\s*\(0+\'?s\)[\s\S]*?<div[^>]*class="stats_value"[^>]*>([\d.,]+)<\/div>/i);
-      if (mcMatch && mcMatch[1]) {
-        const thousands = parseFloat(mcMatch[1].replace(/,/g, ''));
-        if (!Number.isNaN(thousands)) {
-          marketCapM = thousands / 1000.0;
+      // EPS (TTM)
+      const epsMatch = html.match(/EPS\s*\(TTM\)[\s\S]*?<div[^>]*class="stats_value"[^>]*>([-\d.,]+)<\/div>/i);
+      if (epsMatch && epsMatch[1]) {
+        epsTTM = parseFloat(epsMatch[1].replace(/,/g, ''));
+      }
+    } catch {}
+
+    try {
+      // Market Cap may appear with varying units/labels. Capture nearby label and value, then scale to millions.
+      const mcGeneric = html.match(/(Market\s*Cap[^<]{0,50})[\s\S]*?<div[^>]*class="stats_value"[^>]*>([\d.,]+)<\/div>/i);
+      if (mcGeneric && mcGeneric[2]) {
+        const label = (mcGeneric[1] || '').toLowerCase();
+        const raw = parseFloat(mcGeneric[2].replace(/,/g, ''));
+        if (!Number.isNaN(raw)) {
+          if (label.includes("000")) {
+            // Value is in thousands of PKR millions → convert to millions
+            marketCapM = raw / 1000.0;
+          } else if (label.includes("mn") || label.includes("million") || label.includes("(m)")) {
+            marketCapM = raw;
+          } else if (label.includes("bn") || label.includes("billion") || label.includes("(b)")) {
+            marketCapM = raw * 1000.0;
+          } else {
+            // Fallback: assume value is already in millions
+            marketCapM = raw;
+          }
         }
       }
     } catch {}
 
-    const result = { pe, marketCapM };
+    const result = { pe, marketCapM, epsTTM };
     this.companyFundamentals.set(upper, result);
     return result;
   }
@@ -193,12 +214,49 @@ class PSXAdapter {
         totalMarketCapM += marketCapM || 0;
       }
 
+      // Compute sector avg P/E using ALL listings in each sector (not limited to KSE-100)
+      const sectorAvgPEAllListings = new Map<string, number>();
+      for (const [sectorName] of sectorMap.entries()) {
+        const universe = allList.filter(c => (c.sector || '').toUpperCase() === sectorName.toUpperCase());
+        // Load fundamentals for all companies in this sector (cached)
+        await Promise.all(universe.map(c => c.symbol ? this.loadCompanyFundamentals(c.symbol) : Promise.resolve({})));
+        let sumMarketCapM = 0;
+        let sumEarningsM = 0; // earnings in same scale as market cap (M)
+        const peList: number[] = [];
+        for (const c of universe) {
+          const sym = (c.symbol || '').toUpperCase();
+          const f = this.companyFundamentals.get(sym);
+          // Aggregate P/E methodology: PE_sector = Sum(MCap) / Sum(Earnings)
+          // where Earnings prefer EPS(TTM)*Shares; fallback to MarketCap/PE.
+          if (
+            f && typeof f.pe === 'number' && !Number.isNaN(f.pe) && f.pe > 0 && f.pe < 200 &&
+            typeof f.marketCapM === 'number' && !Number.isNaN(f.marketCapM) && f.marketCapM > 0
+          ) {
+            sumMarketCapM += f.marketCapM;
+            const shares = this.companyShares.get(sym) || 0;
+            if (typeof f.epsTTM === 'number' && !Number.isNaN(f.epsTTM) && f.epsTTM > 0 && shares > 0) {
+              sumEarningsM += (f.epsTTM * shares) / 1_000_000; // earnings to millions
+            } else {
+              sumEarningsM += (f.marketCapM / f.pe);
+            }
+            peList.push(f.pe);
+          }
+        }
+        let avg = sumEarningsM > 0 ? (sumMarketCapM / sumEarningsM) : 0;
+        // Fallback to simple mean if aggregate cannot be computed
+        if (avg === 0 && peList.length > 0) {
+          avg = peList.reduce((a, b) => a + b, 0) / peList.length;
+        }
+        sectorAvgPEAllListings.set(sectorName, avg);
+      }
+
       const sectors = Array.from(sectorMap.entries()).map(([name, s]) => ({
         name,
         marketCap: s.marketCapM, // in PKR millions
         percentage: totalMarketCapM > 0 ? (s.marketCapM / totalMarketCapM) * 100 : 0,
         companiesCount: s.count,
-        avgPE: s.peCount > 0 ? s.totalPE / s.peCount : 0,
+        // Use avg P/E computed from ALL listings vs KSE-100 subset
+        avgPE: sectorAvgPEAllListings.get(name) || 0,
         change1D: s.marketCapM > 0 ? (s.weightedChangeNumerator / s.marketCapM) : 0,
       }));
 
@@ -408,6 +466,9 @@ class PSXAdapter {
           // Parse shares (remove commas and convert to number)
           const shares = parseInt(sharesCell.replace(/[,\s]/g, '') || '0') || 0;
           const freeFloat = parseInt(freeFloatCell.replace(/[,\s]/g, '') || '0') || 0;
+          if (symbol) {
+            this.companyShares.set(symbol.toUpperCase(), shares);
+          }
           
           allCompanies.push({
             symbol: symbol,
