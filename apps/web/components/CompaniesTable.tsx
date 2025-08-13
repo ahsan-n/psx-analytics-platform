@@ -13,7 +13,7 @@ interface CompaniesTableProps {
 export default function CompaniesTable({ data, title = "Companies", sectorAvgPeByName = {} }: CompaniesTableProps) {
   const [query, setQuery] = React.useState('');
   const [sectorFilter, setSectorFilter] = React.useState<string>('');
-  const [sortKey, setSortKey] = React.useState<'symbol' | 'name' | 'sector' | 'marketCap' | 'price' | 'change' | 'pe' | 'sectorPE'>('marketCap');
+  const [sortKey, setSortKey] = React.useState<'symbol' | 'name' | 'sector' | 'marketCap' | 'marketCapComputed' | 'price' | 'change' | 'pe' | 'sectorPE'>('marketCap');
   const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('desc');
 
   const sectors = Array.from(new Set((data.companies || []).map(c => c.sector).filter(Boolean))) as string[];
@@ -74,10 +74,13 @@ export default function CompaniesTable({ data, title = "Companies", sectorAvgPeB
                 Sector
               </th>
               <th onClick={() => {setSortKey('marketCap'); setSortDir(sortDir==='asc'?'desc':'asc')}} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer">
-                Market Cap
+                Market Cap (KSE 100 contribution)
               </th>
               <th onClick={() => {setSortKey('price'); setSortDir(sortDir==='asc'?'desc':'asc')}} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer">
                 Price
+              </th>
+              <th onClick={() => {setSortKey('marketCapComputed'); setSortDir(sortDir==='asc'?'desc':'asc')}} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer">
+                Market Cap
               </th>
               <th onClick={() => {setSortKey('change'); setSortDir(sortDir==='asc'?'desc':'asc')}} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer">
                 Change
@@ -114,6 +117,12 @@ export default function CompaniesTable({ data, title = "Companies", sectorAvgPeB
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                   PKR {company.price.toFixed(2)}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                  {(() => {
+                    const mc = (company as any).marketCapComputed as number | undefined;
+                    return mc && mc > 0 ? `PKR ${(mc / 1000).toFixed(0)}B` : '—';
+                  })()}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                   <span className={`${company.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>

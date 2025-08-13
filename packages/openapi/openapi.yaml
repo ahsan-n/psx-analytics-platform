@@ -367,6 +367,12 @@ components:
         marketCap:
           type: number
           description: Market cap in PKR millions
+        marketCapComputed:
+          type: number
+          description: Market cap computed as current price × shares outstanding (PKR millions)
+        sharesOutstanding:
+          type: number
+          description: Total shares outstanding
         price:
           type: number
           description: Current share price

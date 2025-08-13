@@ -97,6 +97,17 @@ class PSXAdapter {
       }
     } catch {}
 
+    // Shares Outstanding → capture and cache for symbol
+    try {
+      const shMatch = html.match(/Shares\s*Outstanding[\s\S]*?<div[^>]*class="stats_value"[^>]*>([\d.,]+)<\/div>/i);
+      if (shMatch && shMatch[1]) {
+        const shares = parseInt(shMatch[1].replace(/[\s,]/g, ''), 10);
+        if (!Number.isNaN(shares) && shares > 0) {
+          this.companyShares.set(upper, shares);
+        }
+      }
+    } catch {}
+
     try {
       // Market Cap may appear with varying units/labels. Capture nearby label and value, then scale to millions.
       const mcGeneric = html.match(/(Market\s*Cap[^<]{0,50})[\s\S]*?<div[^>]*class="stats_value"[^>]*>([\d.,]+)<\/div>/i);
@@ -226,18 +237,23 @@ class PSXAdapter {
         for (const c of universe) {
           const sym = (c.symbol || '').toUpperCase();
           const f = this.companyFundamentals.get(sym);
-          // Aggregate P/E methodology: PE_sector = Sum(MCap) / Sum(Earnings)
-          // where Earnings prefer EPS(TTM)*Shares; fallback to MarketCap/PE.
-          if (
-            f && typeof f.pe === 'number' && !Number.isNaN(f.pe) && f.pe > 0 && f.pe < 200 &&
-            typeof f.marketCapM === 'number' && !Number.isNaN(f.marketCapM) && f.marketCapM > 0
-          ) {
-            sumMarketCapM += f.marketCapM;
-            const shares = this.companyShares.get(sym) || 0;
+          // Aggregate P/E methodology with computed market cap: 
+          // MarketCap(M) = price × shares / 1_000_000 (prefer), else fallback to parsed marketCapM
+          const shares = this.companyShares.get(sym) || 0;
+          const k = this.kse100Metrics?.get(sym);
+          const priceForCap = k?.current || 0;
+          let capM = 0;
+          if (shares > 0 && priceForCap > 0) {
+            capM = (shares * priceForCap) / 1_000_000;
+          } else if (f && typeof f.marketCapM === 'number' && !Number.isNaN(f.marketCapM) && f.marketCapM > 0) {
+            capM = f.marketCapM;
+          }
+          if (capM > 0 && f && typeof f.pe === 'number' && !Number.isNaN(f.pe) && f.pe > 0 && f.pe < 200) {
+            sumMarketCapM += capM;
             if (typeof f.epsTTM === 'number' && !Number.isNaN(f.epsTTM) && f.epsTTM > 0 && shares > 0) {
               sumEarningsM += (f.epsTTM * shares) / 1_000_000; // earnings to millions
             } else {
-              sumEarningsM += (f.marketCapM / f.pe);
+              sumEarningsM += (capM / f.pe);
             }
             peList.push(f.pe);
           }
@@ -380,11 +396,16 @@ class PSXAdapter {
       // Enrich with metrics from KSE100 page
       const enriched = filtered.map(c => {
         const m = this.kse100Metrics?.get((c.symbol || '').toUpperCase());
+        const shares = this.companyShares.get((c.symbol || '').toUpperCase()) || 0;
+        const marketCapComputed = shares > 0 && m && m.current > 0 ? (shares * m.current) / 1_000_000 : undefined;
         return {
           ...c,
           price: m ? m.current : c.price,
           change: m ? m.changePct : c.change,
           marketCap: m ? m.marketCapM : c.marketCap, // already in M
+          // expose computed cap separately per schema extension
+          marketCapComputed,
+          sharesOutstanding: shares || undefined,
         };
       });
       const page = params.page || 1;
@@ -395,10 +416,15 @@ class PSXAdapter {
       const filled = await Promise.all(pageSlice.map(async (c) => {
         if (!c.symbol) return c;
         const f = await this.loadCompanyFundamentals(c.symbol);
+        const m = this.kse100Metrics?.get((c.symbol || '').toUpperCase());
+        const shares = this.companyShares.get((c.symbol || '').toUpperCase()) || 0;
+        const marketCapComputed = shares > 0 && m && m.current > 0 ? (shares * m.current) / 1_000_000 : c.marketCapComputed;
         return {
           ...c,
           pe: (f.pe !== undefined ? f.pe : c.pe),
           marketCap: (c.marketCap !== undefined ? c.marketCap : f.marketCapM),
+          marketCapComputed,
+          sharesOutstanding: shares || c.sharesOutstanding,
         };
       }));
       return { companies: filled, total: enriched.length, page, limit };

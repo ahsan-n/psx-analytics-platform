@@ -115,6 +115,10 @@ export interface components {
       sector?: string;
       /** @description Market cap in PKR millions */
       marketCap?: number;
+      /** @description Market cap computed as current price × shares outstanding (PKR millions) */
+      marketCapComputed?: number;
+      /** @description Total shares outstanding */
+      sharesOutstanding?: number;
       /** @description Current share price */
       price?: number;
       /** @description Price change percentage */
