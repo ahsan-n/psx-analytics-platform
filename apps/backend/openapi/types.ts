@@ -9,6 +9,18 @@ export interface paths {
     /** Health check */
     get: operations["getHealth"];
   };
+  "/api/dashboard/sectors": {
+    /** Get sector breakdown data */
+    get: operations["getSectorBreakdown"];
+  };
+  "/api/companies": {
+    /** Get companies list */
+    get: operations["getCompanies"];
+  };
+  "/api/companies/{symbol}": {
+    /** Get company analytics */
+    get: operations["getCompanyAnalytics"];
+  };
 }
 
 export type webhooks = Record<string, never>;
@@ -22,6 +34,115 @@ export interface components {
       service?: string;
       /** Format: date-time */
       timestamp?: string;
+    };
+    SectorBreakdownResponse: {
+      sectors?: components["schemas"]["SectorData"][];
+      /** @description Total market cap in PKR millions */
+      totalMarketCap?: number;
+      /** Format: date-time */
+      lastUpdated?: string;
+    };
+    SectorData: {
+      /** @example Banking */
+      name?: string;
+      /** @description Market cap in PKR millions */
+      marketCap?: number;
+      /** @description Percentage of total market */
+      percentage?: number;
+      /** @description Number of companies in sector */
+      companiesCount?: number;
+      /** @description Average P/E ratio */
+      avgPE?: number;
+      /** @description 1-month performance percentage */
+      performance1M?: number;
+    };
+    CompaniesResponse: {
+      companies?: components["schemas"]["CompanyBasic"][];
+      total?: number;
+      page?: number;
+      limit?: number;
+    };
+    CompanyBasic: {
+      /** @example HBL */
+      symbol?: string;
+      /** @example Habib Bank Limited */
+      name?: string;
+      /** @example Banking */
+      sector?: string;
+      /** @description Market cap in PKR millions */
+      marketCap?: number;
+      /** @description Current share price */
+      price?: number;
+      /** @description Price change percentage */
+      change?: number;
+      /** @description P/E ratio */
+      pe?: number;
+    };
+    CompanyAnalyticsResponse: {
+      company?: components["schemas"]["CompanyDetails"];
+      financials?: components["schemas"]["CompanyFinancials"];
+      ratios?: components["schemas"]["CompanyRatios"];
+      performance?: components["schemas"]["CompanyPerformance"];
+    };
+    CompanyDetails: {
+      symbol?: string;
+      name?: string;
+      sector?: string;
+      industry?: string;
+      marketCap?: number;
+      sharesOutstanding?: number;
+      description?: string;
+      website?: string;
+    };
+    CompanyFinancials: {
+      /** @description TTM revenue in PKR millions */
+      revenue?: number;
+      /** @description TTM net income in PKR millions */
+      netIncome?: number;
+      /** @description Total assets in PKR millions */
+      totalAssets?: number;
+      /** @description Total equity in PKR millions */
+      totalEquity?: number;
+      /** @description Cash and equivalents in PKR millions */
+      cash?: number;
+      /** @description Total debt in PKR millions */
+      debt?: number;
+    };
+    CompanyRatios: {
+      /** @description P/E ratio */
+      pe?: number;
+      /** @description P/B ratio */
+      pb?: number;
+      /** @description Return on equity percentage */
+      roe?: number;
+      /** @description Return on assets percentage */
+      roa?: number;
+      /** @description Debt to equity ratio */
+      debtToEquity?: number;
+      /** @description Current ratio */
+      currentRatio?: number;
+      /** @description Gross margin percentage */
+      grossMargin?: number;
+      /** @description Net margin percentage */
+      netMargin?: number;
+    };
+    CompanyPerformance: {
+      /** @description Current price */
+      price?: number;
+      /** @description 1-day change percentage */
+      change1D?: number;
+      /** @description 1-week change percentage */
+      change1W?: number;
+      /** @description 1-month change percentage */
+      change1M?: number;
+      /** @description 3-month change percentage */
+      change3M?: number;
+      /** @description 1-year change percentage */
+      change1Y?: number;
+      /** @description 52-week high */
+      high52W?: number;
+      /** @description 52-week low */
+      low52W?: number;
     };
   };
   responses: never;
@@ -44,6 +165,53 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["HealthResponse"];
+        };
+      };
+    };
+  };
+  /** Get sector breakdown data */
+  getSectorBreakdown: {
+    responses: {
+      /** @description Sector breakdown data */
+      200: {
+        content: {
+          "application/json": components["schemas"]["SectorBreakdownResponse"];
+        };
+      };
+    };
+  };
+  /** Get companies list */
+  getCompanies: {
+    parameters: {
+      query?: {
+        /** @description Filter by sector */
+        sector?: string;
+        /** @description Limit number of results */
+        limit?: number;
+      };
+    };
+    responses: {
+      /** @description List of companies */
+      200: {
+        content: {
+          "application/json": components["schemas"]["CompaniesResponse"];
+        };
+      };
+    };
+  };
+  /** Get company analytics */
+  getCompanyAnalytics: {
+    parameters: {
+      path: {
+        /** @description Company symbol */
+        symbol: string;
+      };
+    };
+    responses: {
+      /** @description Company analytics data */
+      200: {
+        content: {
+          "application/json": components["schemas"]["CompanyAnalyticsResponse"];
         };
       };
     };

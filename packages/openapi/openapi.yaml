@@ -18,6 +18,61 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
+  
+  /api/dashboard/sectors:
+    get:
+      summary: Get sector breakdown data
+      operationId: getSectorBreakdown
+      responses:
+        '200':
+          description: Sector breakdown data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SectorBreakdownResponse'
+  
+  /api/companies:
+    get:
+      summary: Get companies list
+      operationId: getCompanies
+      parameters:
+        - name: sector
+          in: query
+          description: Filter by sector
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Limit number of results
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of companies
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompaniesResponse'
+  
+  /api/companies/{symbol}:
+    get:
+      summary: Get company analytics
+      operationId: getCompanyAnalytics
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          description: Company symbol
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Company analytics data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompanyAnalyticsResponse'
 components:
   schemas:
     HealthResponse:
@@ -32,4 +87,189 @@ components:
         timestamp:
           type: string
           format: date-time
+    
+    SectorBreakdownResponse:
+      type: object
+      properties:
+        sectors:
+          type: array
+          items:
+            $ref: '#/components/schemas/SectorData'
+        totalMarketCap:
+          type: number
+          description: Total market cap in PKR millions
+        lastUpdated:
+          type: string
+          format: date-time
+    
+    SectorData:
+      type: object
+      properties:
+        name:
+          type: string
+          example: Banking
+        marketCap:
+          type: number
+          description: Market cap in PKR millions
+        percentage:
+          type: number
+          description: Percentage of total market
+        companiesCount:
+          type: integer
+          description: Number of companies in sector
+        avgPE:
+          type: number
+          description: Average P/E ratio
+        performance1M:
+          type: number
+          description: 1-month performance percentage
+    
+    CompaniesResponse:
+      type: object
+      properties:
+        companies:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompanyBasic'
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+    
+    CompanyBasic:
+      type: object
+      properties:
+        symbol:
+          type: string
+          example: HBL
+        name:
+          type: string
+          example: Habib Bank Limited
+        sector:
+          type: string
+          example: Banking
+        marketCap:
+          type: number
+          description: Market cap in PKR millions
+        price:
+          type: number
+          description: Current share price
+        change:
+          type: number
+          description: Price change percentage
+        pe:
+          type: number
+          description: P/E ratio
+    
+    CompanyAnalyticsResponse:
+      type: object
+      properties:
+        company:
+          $ref: '#/components/schemas/CompanyDetails'
+        financials:
+          $ref: '#/components/schemas/CompanyFinancials'
+        ratios:
+          $ref: '#/components/schemas/CompanyRatios'
+        performance:
+          $ref: '#/components/schemas/CompanyPerformance'
+    
+    CompanyDetails:
+      type: object
+      properties:
+        symbol:
+          type: string
+        name:
+          type: string
+        sector:
+          type: string
+        industry:
+          type: string
+        marketCap:
+          type: number
+        sharesOutstanding:
+          type: number
+        description:
+          type: string
+        website:
+          type: string
+    
+    CompanyFinancials:
+      type: object
+      properties:
+        revenue:
+          type: number
+          description: TTM revenue in PKR millions
+        netIncome:
+          type: number
+          description: TTM net income in PKR millions
+        totalAssets:
+          type: number
+          description: Total assets in PKR millions
+        totalEquity:
+          type: number
+          description: Total equity in PKR millions
+        cash:
+          type: number
+          description: Cash and equivalents in PKR millions
+        debt:
+          type: number
+          description: Total debt in PKR millions
+    
+    CompanyRatios:
+      type: object
+      properties:
+        pe:
+          type: number
+          description: P/E ratio
+        pb:
+          type: number
+          description: P/B ratio
+        roe:
+          type: number
+          description: Return on equity percentage
+        roa:
+          type: number
+          description: Return on assets percentage
+        debtToEquity:
+          type: number
+          description: Debt to equity ratio
+        currentRatio:
+          type: number
+          description: Current ratio
+        grossMargin:
+          type: number
+          description: Gross margin percentage
+        netMargin:
+          type: number
+          description: Net margin percentage
+    
+    CompanyPerformance:
+      type: object
+      properties:
+        price:
+          type: number
+          description: Current price
+        change1D:
+          type: number
+          description: 1-day change percentage
+        change1W:
+          type: number
+          description: 1-week change percentage
+        change1M:
+          type: number
+          description: 1-month change percentage
+        change3M:
+          type: number
+          description: 3-month change percentage
+        change1Y:
+          type: number
+          description: 1-year change percentage
+        high52W:
+          type: number
+          description: 52-week high
+        low52W:
+          type: number
+          description: 52-week low
 
