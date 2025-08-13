@@ -17,9 +17,10 @@ export default function DashboardPage() {
       try {
         OpenAPI.BASE = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
         
+        OpenAPI.BASE = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
         const [sectorsResponse, companiesResponse] = await Promise.all([
-          DefaultService.getSectorBreakdown(),
-          DefaultService.getCompanies({ limit: 10 })
+          DefaultService.getSectorBreakdown({ index: 'KSE100' }),
+          DefaultService.getCompanies({ index: 'KSE100', limit: 10 })
         ]);
 
         setSectorData(sectorsResponse);
@@ -62,7 +63,12 @@ export default function DashboardPage() {
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="py-6">
-            <h1 className="text-3xl font-bold text-gray-900">PSX Analytics Dashboard</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl font-bold text-gray-900">PSX Analytics Dashboard</h1>
+              <span className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 ring-1 ring-inset ring-blue-200">
+                Scope: KSE-100
+              </span>
+            </div>
             <p className="mt-2 text-gray-600">
               Pakistan Stock Exchange fundamental analysis and market overview
             </p>
@@ -79,25 +85,27 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="text-center">
                 <div className="text-2xl font-bold text-blue-600">
-                  {sectorData ? `PKR ${(sectorData.totalMarketCap / 1000000).toFixed(1)}T` : '-'}
+                  {sectorData && sectorData.totalMarketCap !== undefined ? `PKR ${(sectorData.totalMarketCap / 1000000).toFixed(1)}T` : '-'}
                 </div>
                 <div className="text-sm text-gray-600">Total Market Cap</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-green-600">
-                  {sectorData ? sectorData.sectors.length : '-'}
+                  {sectorData && sectorData.sectors ? sectorData.sectors.length : '-'}
                 </div>
                 <div className="text-sm text-gray-600">Sectors</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-purple-600">
-                  {sectorData ? sectorData.sectors.reduce((sum, s) => sum + s.companiesCount, 0) : '-'}
+                  {sectorData && sectorData.sectors ? sectorData.sectors.reduce((sum, s) => sum + (s.companiesCount || 0), 0) : '-'}
                 </div>
                 <div className="text-sm text-gray-600">Listed Companies</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-orange-600">
-                  {sectorData ? sectorData.sectors.reduce((sum, s) => sum + s.avgPE, 0) / sectorData.sectors.length : '-'}
+                  {sectorData && sectorData.sectors && sectorData.sectors.length > 0
+                    ? (sectorData.sectors.reduce((sum, s) => sum + (s.avgPE || 0), 0) / sectorData.sectors.length).toFixed(1)
+                    : '-'}
                 </div>
                 <div className="text-sm text-gray-600">Avg P/E Ratio</div>
               </div>

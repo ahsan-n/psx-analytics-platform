@@ -3,8 +3,9 @@ import { psxAdapter } from '../../../../lib/psx-adapter';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
-  // Fetch real PSX sector data (no fallback to mock)
-  const sectorData = await psxAdapter.getSectorBreakdown();
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const index = searchParams.get('index') || 'KSE100';
+  const sectorData = await psxAdapter.getSectorBreakdown(index);
   return NextResponse.json(sectorData);
 }

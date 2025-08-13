@@ -21,6 +21,7 @@ interface PSXHttpOptions {
 class PSXAdapter {
   private baseUrl: string;
   private defaultOptions: PSXHttpOptions;
+  private kse100Symbols: Set<string> | null = null;
 
   constructor(baseUrl = PSX_BASE_URL, options: PSXHttpOptions = {}) {
     this.baseUrl = baseUrl;
@@ -29,6 +30,23 @@ class PSXAdapter {
       retries: 3,
       ...options,
     };
+  }
+
+  private async ensureKSE100SymbolsLoaded(): Promise<Set<string>> {
+    if (this.kse100Symbols && this.kse100Symbols.size > 0) return this.kse100Symbols;
+    const response = await this.fetchWithRetry(`${this.baseUrl}/indices/KSE100`);
+    const html = await response.text();
+    const symbols: string[] = [];
+    const tbodyMatch = html.match(/<tbody[^>]*>([\s\S]*?)<\/tbody>/);
+    if (tbodyMatch) {
+      const rows = tbodyMatch[1].match(/<tr[^>]*>([\s\S]*?)<\/tr>/g) || [];
+      for (const row of rows) {
+        const symMatch = row.match(/<strong>([^<]+)<\/strong>/);
+        if (symMatch && symMatch[1]) symbols.push(symMatch[1].trim().toUpperCase());
+      }
+    }
+    this.kse100Symbols = new Set(symbols);
+    return this.kse100Symbols;
   }
 
   private async fetchWithRetry(url: string, options: RequestInit = {}): Promise<Response> {
@@ -75,7 +93,7 @@ class PSXAdapter {
    * Get sector breakdown data
    * Maps to: GET https://dps.psx.com.pk/sector-summary/sectorwise
    */
-  async getSectorBreakdown(): Promise<SectorBreakdownResponse> {
+  async getSectorBreakdown(index: string = 'KSE100'): Promise<SectorBreakdownResponse> {
     const response = await this.fetchWithRetry(`${this.baseUrl}/sector-summary/sectorwise`);
     const rawData = await response.text();
 
@@ -84,7 +102,43 @@ class PSXAdapter {
     console.log('PSX Sector Raw Data (first 500 chars):', rawData.substring(0, 500));
 
     // Parse HTML table and normalize to our schema
-    return this.parseSectorHtml(rawData);
+    const parsed = this.parseSectorHtml(rawData);
+    if (index && index.toUpperCase() === 'KSE100') {
+      // Recompute sector stats using only KSE-100 companies
+      const kset = await this.ensureKSE100SymbolsLoaded();
+      const allCompanies = await this.getCompanies({ limit: 10000 });
+      const allList = allCompanies.companies || [];
+      const kseCompanies = allList.filter(c => kset.has((c.symbol || '').toUpperCase()));
+
+      const sectorMap = new Map<string, { count: number; marketCap: number; totalPE: number; perfSum: number }>();
+      let totalMarketCap = 0;
+      for (const c of kseCompanies) {
+        const sector = c.sector || 'Unknown';
+        if (!sectorMap.has(sector)) sectorMap.set(sector, { count: 0, marketCap: 0, totalPE: 0, perfSum: 0 });
+        const s = sectorMap.get(sector)!;
+        s.count += 1;
+        s.marketCap += c.marketCap || 0;
+        s.totalPE += c.pe || 0;
+        s.perfSum += c.change || 0;
+        totalMarketCap += c.marketCap || 0;
+      }
+
+      const sectors = Array.from(sectorMap.entries()).map(([name, s]) => ({
+        name,
+        marketCap: s.marketCap,
+        percentage: totalMarketCap > 0 ? (s.marketCap / totalMarketCap) * 100 : 0,
+        companiesCount: s.count,
+        avgPE: s.count > 0 ? s.totalPE / s.count : 0,
+        performance1M: s.count > 0 ? s.perfSum / s.count : 0,
+      }));
+
+      return {
+        sectors: sectors.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0)),
+        totalMarketCap,
+        lastUpdated: new Date().toISOString(),
+      };
+    }
+    return parsed;
   }
 
   private parseSectorHtml(html: string): SectorBreakdownResponse {
@@ -170,6 +224,7 @@ class PSXAdapter {
   async getCompanies(params: {
     sector?: string;
     status?: string;
+    index?: string; // e.g., KSE100
     page?: number;
     limit?: number;
   } = {}): Promise<CompaniesResponse> {
@@ -180,13 +235,21 @@ class PSXAdapter {
     console.log('PSX Companies Response Headers:', Object.fromEntries(response.headers.entries()));
     console.log('PSX Companies Raw Data (first 500 chars):', rawData.substring(0, 500));
 
-    // PSX returns HTML table, parse and normalize
-    return this.parseCompaniesHtml(rawData, params);
+    // Parse
+    const parsed = this.parseCompaniesHtml(rawData, params);
+    if (params.index && params.index.toUpperCase() === 'KSE100') {
+      const kset = await this.ensureKSE100SymbolsLoaded();
+      const list = parsed.companies || [];
+      const filtered = list.filter(c => kset.has((c.symbol || '').toUpperCase()));
+      return { ...parsed, companies: filtered, total: filtered.length };
+    }
+    return parsed;
   }
 
   private parseCompaniesHtml(html: string, params: {
     sector?: string;
     status?: string;
+    index?: string;
     page?: number;
     limit?: number;
   }): CompaniesResponse {
@@ -225,6 +288,13 @@ class PSXAdapter {
         const symbol = symbolCell.replace(/[^A-Z0-9]/g, '');
         
         if (symbol && symbol.length > 0 && nameCell && nameCell.length > 0) {
+          // If we are restricting to KSE-100, ensure the "Listed In" column contains KSE-100
+          if (params.index && params.index.toUpperCase() === 'KSE100') {
+            const listedInText = (listedInCell || '').toUpperCase();
+            if (!(listedInText.includes('KSE-100') || listedInText.includes('KSE100'))) {
+              continue;
+            }
+          }
           // Parse shares (remove commas and convert to number)
           const shares = parseInt(sharesCell.replace(/[,\s]/g, '') || '0') || 0;
           const freeFloat = parseInt(freeFloatCell.replace(/[,\s]/g, '') || '0') || 0;

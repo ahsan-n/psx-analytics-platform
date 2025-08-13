@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const sector = searchParams.get('sector');
   const status = searchParams.get('status');
+  const index = searchParams.get('index') || 'KSE100';
   const page = parseInt(searchParams.get('page') || '1');
   const limit = parseInt(searchParams.get('limit') || '20');
 
@@ -14,6 +15,7 @@ export async function GET(request: NextRequest) {
   const companiesData = await psxAdapter.getCompanies({
     sector: sector || undefined,
     status: status || undefined,
+    index,
     page,
     limit
   });

@@ -10,11 +10,11 @@ export interface paths {
     get: operations["getHealth"];
   };
   "/api/dashboard/sectors": {
-    /** Get sector breakdown data */
+    /** Get sector breakdown data (KSE-100 by default) */
     get: operations["getSectorBreakdown"];
   };
   "/api/companies": {
-    /** Get companies list */
+    /** Get companies list (KSE-100 by default) */
     get: operations["getCompanies"];
   };
   "/api/companies/{symbol}": {
@@ -343,8 +343,14 @@ export interface operations {
       };
     };
   };
-  /** Get sector breakdown data */
+  /** Get sector breakdown data (KSE-100 by default) */
   getSectorBreakdown: {
+    parameters: {
+      query?: {
+        /** @description Filter by index/board (default KSE-100) */
+        index?: "KSE100";
+      };
+    };
     responses: {
       /** @description Sector breakdown data */
       200: {
@@ -354,7 +360,7 @@ export interface operations {
       };
     };
   };
-  /** Get companies list */
+  /** Get companies list (KSE-100 by default) */
   getCompanies: {
     parameters: {
       query?: {
@@ -362,6 +368,8 @@ export interface operations {
         sector?: string;
         /** @description Listing status filter (e.g., NC) */
         status?: string;
+        /** @description Filter by index/board (default KSE-100) */
+        index?: "KSE100";
         /** @description Page number (1-based) */
         page?: number;
         /** @description Limit number of results */

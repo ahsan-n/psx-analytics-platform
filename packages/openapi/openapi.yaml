@@ -21,8 +21,16 @@ paths:
   
   /api/dashboard/sectors:
     get:
-      summary: Get sector breakdown data
+      summary: Get sector breakdown data (KSE-100 by default)
       operationId: getSectorBreakdown
+      parameters:
+        - name: index
+          in: query
+          description: Filter by index/board (default KSE-100)
+          schema:
+            type: string
+            enum: [KSE100]
+            default: KSE100
       responses:
         '200':
           description: Sector breakdown data
@@ -33,7 +41,7 @@ paths:
   
   /api/companies:
     get:
-      summary: Get companies list
+      summary: Get companies list (KSE-100 by default)
       operationId: getCompanies
       parameters:
         - name: sector
@@ -46,6 +54,13 @@ paths:
           description: Listing status filter (e.g., NC)
           schema:
             type: string
+        - name: index
+          in: query
+          description: Filter by index/board (default KSE-100)
+          schema:
+            type: string
+            enum: [KSE100]
+            default: KSE100
         - name: page
           in: query
           description: Page number (1-based)
