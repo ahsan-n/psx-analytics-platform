@@ -1,0 +1,19 @@
+{
+  "name": "stock-analytics-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "codegen:web": "openapi-typescript packages/openapi/openapi.yaml -o apps/web/openapi/types.ts",
+    "codegen:backend": "openapi-typescript packages/openapi/openapi.yaml -o apps/backend/openapi/types.ts",
+    "codegen": "npm run codegen:web && npm run codegen:backend",
+    "dev": "concurrently -n backend,web -c blue,green \"npm --workspace apps/backend run dev\" \"npm --workspace apps/web run dev\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0",
+    "openapi-typescript": "^6.7.6",
+    "openapi-typescript-codegen": "^0.29.0"
+  }
+}

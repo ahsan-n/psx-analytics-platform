@@ -1,0 +1,8 @@
+# Cursor Rules — Stock Analytics
+
+- Edit `packages/openapi/openapi.yaml` first; then run `npm run codegen`.
+- Implement vertical slices end-to-end (API, types, UI).
+- Use TypeScript, avoid `any`, favor explicit types and early returns.
+- Backend API: `apps/backend/app/api/**`; Frontend: `apps/web/app/**` with Tailwind.
+- CORS dev origins: backend `http://localhost:4000`, web `http://localhost:3000`.
+- Keep formatting consistent; do not reformat unrelated code.
