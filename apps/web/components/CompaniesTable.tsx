@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import Link from 'next/link';
 import type { CompaniesResponse } from '@stock-analytics/api-client';
 
