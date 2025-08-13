@@ -1,4 +1,4 @@
-# PSX Fundamental Analytics Platform — Project Plan
+ # PSX Fundamental Analytics Platform — Project Plan
 
 - Schema-first APIs (OpenAPI) with generated clients/servers
 - Vertical slices delivery
